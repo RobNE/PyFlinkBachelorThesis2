@@ -38,11 +38,6 @@ under the License.
 			<artifactId>flink-java</artifactId>
 			<version>${project.version}</version>
 		</dependency>
-		<dependency>
-			<groupId>tw.edu.ntu.csie</groupId>
-			<artifactId>libsvm</artifactId>
-			<version>3.17</version>
-		</dependency>
 	</dependencies>
 	
 	
@@ -50,59 +45,8 @@ under the License.
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-dependency-plugin</artifactId>
-				<executions>
-					<execution>
-						<id>LibSVM</id>
-						<phase>prepare-package</phase>
-						<goals>
-							<goal>unpack</goal>
-						</goals>
-							
-						<configuration>
-							<artifactItems>
-								<artifactItem>
-									<groupId>tw.edu.ntu.csie</groupId>
-									<artifactId>libsvm</artifactId>
-									<version>3.17</version>
-									<type>jar</type>
-									<overWrite>false</overWrite>
-									<outputDirectory>target/classes</outputDirectory>
-								</artifactItem>
-							</artifactItems>
-						</configuration>
-					</execution>
-				</executions>
-				
-			</plugin>
-		
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
 				<executions>
-					<execution>
-						<id>LibSVM</id>
-						<phase>package</phase>
-						<goals>
-							<goal>jar</goal>
-						</goals>
-
-						<configuration>
-							<classifier>LibSVM</classifier>
-
-							<archive>
-								<manifestEntries>
-									<program-class>org.apache.flink.examples.java.spatial.SatelliteAnalysis</program-class>
-								</manifestEntries>
-							</archive>
-
-							<includes>
-								<include>*.class</include>
-								<include>libsvm/**/*.class</include>
-								<include>**/spatial/*.class</include>
-							</includes>
-						</configuration>
-					</execution>
 				
 					<!-- KMeans -->
 					<execution>

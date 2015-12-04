@@ -118,7 +118,7 @@ public class TileStitchReduce implements GroupReduceFunction<Tile, Tile> {
 				}
 			}
 
-//			result.setS16Tile(content);
+			result.setS16Tile(content);
 			out.collect(result);
 
 		}
