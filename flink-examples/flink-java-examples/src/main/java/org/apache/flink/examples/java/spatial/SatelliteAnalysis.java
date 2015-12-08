@@ -17,15 +17,11 @@
  */
 package org.apache.flink.examples.java.spatial;
 
-//import java.util.ArrayList;
+import java.util.ArrayList;
 import java.util.Arrays;
-//import java.util.Collections;
-//import java.util.HashMap;
-//import java.util.HashSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-//import java.util.Map;
-//import java.util.Set;
-import libsvm.svm_model;
 
 import org.apache.commons.lang.ArrayUtils;
 //import org.apache.flink.api.common.functions.FilterFunction;
@@ -58,6 +54,7 @@ public class SatelliteAnalysis {
 	private static String outputFilePath;
 	private static int pixelSize;
 	private static int detailedBlockSize; //squared blocks for the beginning
+	private static int numberOfScenes = 0;
 
 	public static void main(String[] args) throws Exception {
 		
@@ -72,7 +69,8 @@ public class SatelliteAnalysis {
 		
 		//Use the readTiles function from enviCube.java to read the given scenes as Tiles 
 		DataSet<Tile> tiles = readTiles(env);
-		//Slice the different tiles into multiple smaller tiles. Retains only relevant data for the chosen position  
+		//Slice the different tiles into multiple smaller tiles. Retains only relevant data for the chosen position 
+		//TODO: Dont group by acq date here. Just cut the scenes and group them later
 		DataSet<Tile> stitchedTimeSlices = tiles.groupBy(
 				new TileTimeKeySelector<Tile>()).reduceGroup(				//Returns the acquisition date of every tile
 				new TileStitchReduce().configure(leftUpper, rightLower,		//Returns all tiles which are relevant for the analysis at the given location
@@ -81,19 +79,22 @@ public class SatelliteAnalysis {
 		//Slices all Tiles in smaller SlicedTiles. Then groups them by their position and sorts them by acquisitionDate. Afterwards the missing/invalid values 
 		//for every group are approximated and inserted in the group.
 		//TODO: Add a groupReduce to approx future values.
-		DataSet<SlicedTile> slicedTilesSortedAndApproximated = stitchedTimeSlices.flatMap(new sliceDetailedBlocks(detailedBlockSize, blockSize))
-				//Group the slicedTiles by their position
-				.groupBy(new KeySelector<SlicedTile, Tuple2<Integer, Integer>>() {
+		DataSet<SlicedTile> slicedTilesSortedAndApproximated = stitchedTimeSlices.flatMap(new SliceDetailedBlocks(detailedBlockSize, detailedBlockSize))
+				//Group the slicedTiles by their position and the respective band
+				.groupBy(new KeySelector<SlicedTile, Tuple2<Tuple2<Integer, Integer>, Long>>() {
 					private static final long serialVersionUID = 5L;
+					Tuple2<Tuple2<Integer, Integer>, Long> groupingKey = new Tuple2<Tuple2<Integer, Integer>, Long>();
 
-					public Tuple2<Integer, Integer> getKey(SlicedTile s) { 
-						return s.getPositionInTile(); 
+					public Tuple2<Tuple2<Integer, Integer>, Long> getKey(SlicedTile s) {
+						groupingKey.setField(s.getPositionInTile(), 0);
+						groupingKey.setField(s.getAcquisitionDateAsLong(), 1);
+						return groupingKey; 
 					}
 				})
                 //Sort every group of SlicedTiles by their acqTime	
 				.sortGroup(new SlicedTileTimeKeySelector<SlicedTile>(), Order.ASCENDING)
 				//Approximate the missing values for every group
-				.reduceGroup(new ApproxInvalidValues());
+				.reduceGroup(new ApproxInvalidValues(detailedBlockSize, detailedBlockSize));
 																												
 																												//Approx future values
 				
@@ -110,7 +111,7 @@ public class SatelliteAnalysis {
 	 * The sliceDetailedBlocks method returns all sliced blocks of a tile. These are smaller blocks contained in the original tile.
 	 */
 	
-	public static final class sliceDetailedBlocks implements FlatMapFunction<Tile, SlicedTile> {
+	public static final class SliceDetailedBlocks implements FlatMapFunction<Tile, SlicedTile> {
 		private static final long serialVersionUID = 10L;
 		//The slicedTiles' height/width in pixels
 		private int slicedTileHeight;
@@ -124,10 +125,11 @@ public class SatelliteAnalysis {
 			this.originalTileHeight = value.getTileHeight();
 			this.originalTileWidth = value.getTileWidth();
 			
+			//System.out.println(this.originalTileHeight + " + " + this.originalTileWidth);
+			
 			int slicedTilesPerRow = originalTileWidth / slicedTileWidth;
 			int slicedTilesPerCol = originalTileHeight / slicedTileHeight; //As long as the blocks are squared!
 			short[] originalTileS16Tile = value.getS16Tile();
-			
 			
 			for (int row = 0; row < slicedTilesPerRow; row++) {
 				for (int col = 0; col < slicedTilesPerCol; col++) {
@@ -144,10 +146,31 @@ public class SatelliteAnalysis {
 					
 					//Cut the sliced tiles from the s16 array
 					for (int slicedTileRow = 0; slicedTileRow < slicedTileHeight; slicedTileRow++) {
-						short[] tempSlicedTileS16Tile = Arrays.copyOfRange(originalTileS16Tile, (row+slicedTileRow)*originalTileWidth+slicedTileWidth*col, (row+slicedTileRow)*originalTileWidth+slicedTileWidth*col+slicedTileWidth);
+						//System.out.println("The slicedTileRow: " + slicedTileRow);
+						//System.out.println("The original S16 size:" + originalTileS16Tile.length);
+						//System.out.println("The interval beginning: " + col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow);
+						//System.out.println("The interval end: " + col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow + slicedTileWidth);
+						short[] tempSlicedTileS16Tile = new short[originalTileS16Tile.length];
+						try {
+							tempSlicedTileS16Tile = Arrays.copyOfRange(originalTileS16Tile, 
+									col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow, 
+									col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow + slicedTileWidth);
+						} catch (Exception e) {
+							System.out.println("The row:" + row);
+							System.out.println("The col:" + col);
+							System.out.println("The slicedTileRow:" + slicedTileRow);
+							System.out.println("The slicedTilesPerRow:" + slicedTilesPerRow);
+							System.out.println("The slicedTilesPerCol:" + slicedTilesPerCol);
+							
+							
+							System.out.println("This is the error" + e.toString());
+							System.out.println("The original length: " + originalTileS16Tile.length);
+							
+							System.out.println("The interval beginning: " + col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow);
+							System.out.println("The interval end: " + col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow + slicedTileWidth);
+						}
 						slicedTileS16Tile = ArrayUtils.addAll(slicedTileS16Tile, tempSlicedTileS16Tile);
 					}
-					//@TODO: Include band offset (maybe). Depends on StitchReduce. Otherwise another reduce to group bands
 					
 					//Create the slicedTile object
 					SlicedTile slicedTile = new SlicedTile(
@@ -165,9 +188,11 @@ public class SatelliteAnalysis {
 					out.collect(slicedTile);
 				}
 			}
+			
+			numberOfScenes += 1;
 		}
 		
-		public sliceDetailedBlocks (int slicedTileWidth, int slicedTileHeight) {
+		public SliceDetailedBlocks (int slicedTileWidth, int slicedTileHeight) {
 			this.slicedTileHeight = slicedTileHeight;
 			this.slicedTileWidth = slicedTileWidth;
 		}
@@ -181,45 +206,55 @@ public class SatelliteAnalysis {
 		public Long getKey(SlicedTile value) throws Exception {
 			return value.getAcquisitionDateAsLong();
 		}
-
 	}
 	
 	/*
 	 * Approximates all missing values of every pixel-time-series (a group). Therefore all pixels are analyzed for every aquisitionDate. 
+	 * Every instance of the groupReduce has access to every SlicedTile in a group.
 	 */
 	
 	public static final class ApproxInvalidValues implements GroupReduceFunction<SlicedTile, SlicedTile> {
 		//TODO: Import svr+ols libs, use them. Until here it is finished.
 		
-		
 		private static final long serialVersionUID = 4L;
-		private int pixelsPerRow;
-		private int pixelsPerCol;
-		List<Integer> bands;
+		private int slicedTileWidth;
+		private int slicedTileHeight;
 
 		@Override
 		public void reduce(Iterable<SlicedTile> values, Collector<SlicedTile> out) throws Exception {
-			/*
-			Map<Integer, Set<SlicedTile>> bandToTiles = new HashMap<Integer, Set<SlicedTile>>();
-			for (SlicedTile t : values) {
-				Set<SlicedTile> tiles = bandToTiles.get(t.getBand());
-				if (tiles == null) {
-					tiles = new HashSet<SlicedTile>();
-					bandToTiles.put(new Integer(t.getBand()), tiles);
-				}
-				tiles.add(t);
+			HashSet<Long> allDates = new HashSet<Long>();
+			//Create a HashMap for every pixel of the slicedTile. The HashMaps consist of the corresponding pixelTimeSeries
+			System.out.println("The detailedBlockSize: " + slicedTileWidth + " " + slicedTileHeight);
+			List<HashMap<Long, Short>> allPixelTimeSeries = new ArrayList<HashMap<Long, Short>>(slicedTileWidth*slicedTileHeight);
+			
+			for (int i=0; i < slicedTileWidth*slicedTileHeight; i++) {
+				HashMap<Long, Short> pixelTimeSeries = new HashMap<Long, Short>();
+				allPixelTimeSeries.add(i, pixelTimeSeries);
 			}
 			
-			List<Integer> bands = new ArrayList<Integer>(bandToTiles.keySet());
-			Collections.sort(bands);
-			*/
-			//for (int band)
-			//Iterate over all Rows
-			//for (int i = 0; i < pixelsPerRow; i++) {
-			//	for (int j = 0; j < pixelsPerCol; i++) {
-					
-			//	}
-			//}
+			//Create the 
+			for (SlicedTile slicedTile : values) {
+				allDates.add(slicedTile.getAcquisitionDateAsLong());
+				int index = 0;
+				short [] S16Tile = slicedTile.getSlicedTileS16Tile();
+				System.out.println("The slicedTile's S16: " + S16Tile.length);
+				System.out.println("The List size: " + allPixelTimeSeries.size());
+				for (short pixelValue : S16Tile) {
+					allPixelTimeSeries.get(index).put(slicedTile.getAcquisitionDateAsLong(), pixelValue);
+				}
+			}
+			
+			//Use LIBSVM
+			
+			//svm.svm_train(prob, param);
+			
+			//svm.svm_train(values., 3);
+			
+		}
+		
+		public ApproxInvalidValues (int slicedTileWidth, int slicedTileHeight) {
+			this.slicedTileHeight = slicedTileHeight;
+			this.slicedTileWidth = slicedTileWidth;
 		}
 	}
 
@@ -251,8 +286,8 @@ public class SatelliteAnalysis {
 				outputFilePath = params[6];
 				
 				//@TODO: Just for testing, add a relative size meisure later
-				detailedBlockSize = blockSize /10;
-				//detailedBlockSize = Integer.parseInt(params[7]);
+				//detailedBlockSize = blockSize;
+				detailedBlockSize = Integer.parseInt(params[7]);
 			}
 		} else {
 			System.out

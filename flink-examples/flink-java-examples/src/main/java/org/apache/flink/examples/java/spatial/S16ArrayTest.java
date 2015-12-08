@@ -43,17 +43,24 @@ public class S16ArrayTest {
 	 */
 
 	public static void main(String[] args) {
-		short[] originalSlicedTileS16Tile = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-				17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35};
+		//short[] originalSlicedTileS16Tile = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+				//17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35};
 
+		short[] originalSlicedTileS16Tile = new short[28900];
+		for (short i=0; i < 28900; i++) {
+			originalSlicedTileS16Tile[i] = i;
+		}
+				
 		//The slicedTiles' height/width in pixels
 		int slicedTileHeight = 2;
 		int slicedTileWidth = 2;
 		//The original tiles height/width in pixels
-		int originalTileHeight = 6;
-		int originalTileWidth = 6;
+		int originalTileHeight = 170;
+		int originalTileWidth = 170;
 		int slicedTilesPerRow = originalTileWidth / slicedTileWidth;
 		int slicedTilesPerCol = originalTileHeight / slicedTileHeight;
+		
+		System.out.println("The S16 length:" + originalSlicedTileS16Tile.length);
 		
 		for (int row = 0; row < slicedTilesPerRow; row++) {
 			for (int col = 0; col < slicedTilesPerCol; col++) {
@@ -62,8 +69,10 @@ public class S16ArrayTest {
 					//System.out.println((row+slicedTileRow)*originalTileWidth+slicedTileWidth*col);
 					//System.out.println(row*originalTileWidth+slicedTileRow*slicedTileWidth);
 					short[] tempNewSlicedTileS16Tile = Arrays.copyOfRange(originalSlicedTileS16Tile, 
-							(row+slicedTileRow)*originalTileWidth+slicedTileWidth*col, 
-							(row+slicedTileRow)*originalTileWidth+slicedTileWidth*col+slicedTileWidth);
+							col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow,
+							col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow + slicedTileWidth);
+							//(row*originalTileWidth*slicedTileHeight)+slicedTileWidth*col+(slicedTileRow*originalTileWidth), 
+							//(row*originalTileWidth*slicedTileHeight)+slicedTileWidth*col+(slicedTileRow*originalTileWidth)+slicedTileWidth);
 					newSlicedTileS16Tile = ArrayUtils.addAll(newSlicedTileS16Tile, tempNewSlicedTileS16Tile);
 				}
 				System.out.println("THis is a new tile with the lenght: " + newSlicedTileS16Tile.length);
