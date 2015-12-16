@@ -19,9 +19,12 @@ package org.apache.flink.examples.java.spatial;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+
+import libsvm.*;
 
 import org.apache.commons.lang.ArrayUtils;
 //import org.apache.flink.api.common.functions.FilterFunction;
@@ -32,8 +35,10 @@ import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.operators.DataSink;
 //import org.apache.flink.api.java.operators.DataSink;
 import org.apache.flink.api.java.operators.DataSource;
+import org.apache.flink.api.java.operators.SortedGrouping;
 import org.apache.flink.api.java.spatial.Coordinate;
 import org.apache.flink.api.java.spatial.SlicedTile;
 import org.apache.flink.api.java.spatial.Tile;
@@ -41,6 +46,7 @@ import org.apache.flink.api.java.spatial.TileTimeKeySelector;
 import org.apache.flink.api.java.spatial.TileTypeInformation;
 import org.apache.flink.api.java.spatial.envi.TileInputFormat;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.core.fs.Path;
 //import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.util.Collector;
@@ -54,7 +60,7 @@ public class SatelliteAnalysis {
 	private static String outputFilePath;
 	private static int pixelSize;
 	private static int detailedBlockSize; //squared blocks for the beginning
-	private static int numberOfScenes = 0;
+	private static HashSet<Long> allDates = new HashSet<Long>(128);
 
 	public static void main(String[] args) throws Exception {
 		
@@ -79,7 +85,8 @@ public class SatelliteAnalysis {
 		//Slices all Tiles in smaller SlicedTiles. Then groups them by their position and sorts them by acquisitionDate. Afterwards the missing/invalid values 
 		//for every group are approximated and inserted in the group.
 		//TODO: Add a groupReduce to approx future values.
-		DataSet<SlicedTile> slicedTilesSortedAndApproximated = stitchedTimeSlices.flatMap(new SliceDetailedBlocks(detailedBlockSize, detailedBlockSize))
+		DataSet<SlicedTile> slicedTiles = stitchedTimeSlices.flatMap(new SliceDetailedBlocks(detailedBlockSize, detailedBlockSize));
+		DataSet<SlicedTile> dataSetReadyForAnalysis = slicedTiles
 				//Group the slicedTiles by their position and the respective band
 				.groupBy(new KeySelector<SlicedTile, Tuple2<Tuple2<Integer, Integer>, Long>>() {
 					private static final long serialVersionUID = 5L;
@@ -87,22 +94,22 @@ public class SatelliteAnalysis {
 
 					public Tuple2<Tuple2<Integer, Integer>, Long> getKey(SlicedTile s) {
 						groupingKey.setField(s.getPositionInTile(), 0);
-						groupingKey.setField(s.getAcquisitionDateAsLong(), 1);
+						groupingKey.setField(Long.parseLong(s.getAqcuisitionDate(), 20), 1);
 						return groupingKey; 
 					}
 				})
                 //Sort every group of SlicedTiles by their acqTime	
 				.sortGroup(new SlicedTileTimeKeySelector<SlicedTile>(), Order.ASCENDING)
-				//Approximate the missing values for every group
-				.reduceGroup(new ApproxInvalidValues(detailedBlockSize, detailedBlockSize));
-																												
-																												//Approx future values
+				.getDataSet();
+		
+		//Until here everything seems to be valid. See /Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/out/1.txt
+		//Approximate the missing values for every group
+		DataSet<SlicedTile> slicedTilesSortedAndApproximated = dataSetReadyForAnalysis.reduceGroup(new ApproxInvalidValues(detailedBlockSize, detailedBlockSize));
 				
-		slicedTilesSortedAndApproximated.print().setParallelism(2);		
+		slicedTilesSortedAndApproximated.writeAsText(outputFilePath, WriteMode.OVERWRITE).setParallelism(2);		
 		
-		//DataSink<Tile> writeAsEnvi = slicedTilesSortedAndApproximated.writeAsEnvi(outputFilePath, WriteMode.OVERWRITE);
-		
-		//writeAsEnvi.setParallelism(1);
+		//DataSink<SlicedTile> writeAsEnvi = 
+		//slicedTilesSortedAndApproximated.print();
 			
 		env.execute("Data Cube Creation");
 	}
@@ -183,13 +190,16 @@ public class SatelliteAnalysis {
 					
 					slicedTile.setBand(band);
 					slicedTile.setAqcuisitionDate(acquisitionDate);
+					//System.out.println("The acq date: " + acquisitionDate);
+					//System.out.println("The acq date of the st: " + slicedTile.getAqcuisitionDate());
 					slicedTile.setPositionInTile(new Tuple2<Integer, Integer>(row, col));
 
 					out.collect(slicedTile);
 				}
 			}
 			
-			numberOfScenes += 1;
+			//TODO: Check whether the different bands are handled correctly
+			allDates.add(Long.parseLong(value.getAqcuisitionDate(), 10));
 		}
 		
 		public SliceDetailedBlocks (int slicedTileWidth, int slicedTileHeight) {
@@ -204,7 +214,7 @@ public class SatelliteAnalysis {
 
 		@Override
 		public Long getKey(SlicedTile value) throws Exception {
-			return value.getAcquisitionDateAsLong();
+			return Long.parseLong(value.getAqcuisitionDate(), 20);
 		}
 	}
 	
@@ -222,34 +232,137 @@ public class SatelliteAnalysis {
 
 		@Override
 		public void reduce(Iterable<SlicedTile> values, Collector<SlicedTile> out) throws Exception {
-			HashSet<Long> allDates = new HashSet<Long>();
 			//Create a HashMap for every pixel of the slicedTile. The HashMaps consist of the corresponding pixelTimeSeries
 			System.out.println("The detailedBlockSize: " + slicedTileWidth + " " + slicedTileHeight);
-			List<HashMap<Long, Short>> allPixelTimeSeries = new ArrayList<HashMap<Long, Short>>(slicedTileWidth*slicedTileHeight);
+			HashMap<Tuple2<Integer, Integer>, HashMap<Long, Short>> allPixelTimeSeries = new HashMap<Tuple2<Integer, Integer>, HashMap<Long, Short>>(slicedTileWidth*slicedTileHeight);
 			
-			for (int i=0; i < slicedTileWidth*slicedTileHeight; i++) {
-				HashMap<Long, Short> pixelTimeSeries = new HashMap<Long, Short>();
-				allPixelTimeSeries.add(i, pixelTimeSeries);
-			}
 			
-			//Create the 
-			for (SlicedTile slicedTile : values) {
-				allDates.add(slicedTile.getAcquisitionDateAsLong());
-				int index = 0;
-				short [] S16Tile = slicedTile.getSlicedTileS16Tile();
-				System.out.println("The slicedTile's S16: " + S16Tile.length);
-				System.out.println("The List size: " + allPixelTimeSeries.size());
-				for (short pixelValue : S16Tile) {
-					allPixelTimeSeries.get(index).put(slicedTile.getAcquisitionDateAsLong(), pixelValue);
+			
+			//Init the array with empty pixelTimeSeries for every pixel
+			for (int row = 0; row < slicedTileHeight; row++) {
+				for (int col = 0; col < slicedTileWidth; col++) {
+					HashMap<Long, Short> timeSeries = new HashMap<Long, Short>();
+					allPixelTimeSeries.put(new Tuple2<Integer, Integer>(col, row), timeSeries);
 				}
 			}
+			//List<Tuple2<Double[][], Double[][]>> pixelTimeSeriesSVMData = new ArrayList<Tuple2<Double[][], Double[][]>>(slicedTileWidth*slicedTileHeight);
 			
-			//Use LIBSVM
+			//Insert the values into the pixelTimeSeries
+			for (SlicedTile slicedTile : values) {
+				long acquisitionDate = Long.parseLong(slicedTile.getAqcuisitionDate(), 20);
+				for (int row = 0; row < slicedTileHeight; row++) {
+					for (int col = 0; col < slicedTileWidth; col++) {
+						short [] S16Tile = slicedTile.getSlicedTileS16Tile();
+						//Get the pixel value for the pixel at position row/col
+						try {
+							short pixelVegetationIndex = S16Tile[row + col];
+							Tuple2<Integer, Integer> position = new Tuple2<Integer, Integer>(col, row);
+							allPixelTimeSeries.get(position).put(acquisitionDate, pixelVegetationIndex);
+						} catch(Exception e) {
+							System.out.println("The slicedTile x: " + slicedTileWidth + " and the y: " + slicedTileHeight);
+							System.out.println("The row: " + row + " and the col: " + col + " when the array fails at the position: " + (row + col));
+						}
+					}
+				}
+			}
+						
+			System.out.println("The allPixelTimeSeries size: " + allPixelTimeSeries.size() + ". Should be equivalent to slicedTileHeight*slicedTileWidth = " + slicedTileHeight*slicedTileWidth);
 			
-			//svm.svm_train(prob, param);
+			//Add the key values (the positions) to a list to make them easily accessible for the LIBSVM construction
+			List<Tuple2<Integer, Integer>> allPixelTimeSeriesList = new ArrayList<Tuple2<Integer, Integer>>(allPixelTimeSeries.keySet());
+			//Check the size:
+			System.out.println("The size of the allPixelTimeSeriesList (should be row*col): " + allPixelTimeSeriesList.size());
 			
-			//svm.svm_train(values., 3);
-			
+			//Training set size is 80 percent of the dataset size
+			int trainingSetSize = 1;
+			//int trainingSetSize = (int) Math.round(allDates.size()*0.8);
+
+			//Construct a LIVBSVM problem for every timePixelSeries (= for every position)
+			for (Tuple2<Integer, Integer> position : allPixelTimeSeriesList) {
+				double[] train_x = new double[trainingSetSize]; 
+				double[] test_x = new double[allDates.size() - trainingSetSize];
+				double[] train_y = new double[trainingSetSize]; 
+				double[] test_y = new double[allDates.size() - trainingSetSize];
+				
+				//Set the train and test values randomly
+				List<Long>allAcquisitionDatesListShuffled = new ArrayList<Long>(allPixelTimeSeries.get(position).keySet());
+				Collections.shuffle(allAcquisitionDatesListShuffled);
+				System.out.println("The allDatesList: " + allAcquisitionDatesListShuffled);
+				
+				//For testing only (atm I only have two different scenes):
+				List<Long>trainingSetList = new ArrayList<Long>(allAcquisitionDatesListShuffled.subList(0, 1));
+				List<Long>testSetList = new ArrayList<Long>(allAcquisitionDatesListShuffled.subList(1, 2));
+				
+				//List<Long>trainingSetList = new ArrayList<Long>(allAcquisitionDatesList.subList(0, trainingSetSize));
+				//List<Long>testSetList = new ArrayList<Long>(allAcquisitionDatesList.subList(trainingSetSize, allDatesList.size()-1));
+				
+				//Sort the lists to get properly ordered time series
+				Collections.sort(trainingSetList);
+				Collections.sort(testSetList);
+				
+				System.out.println("The testList: " + testSetList);
+				System.out.println("The trainingList: " + trainingSetList);
+				
+				for (int i=0; i < trainingSetList.size(); i++) {
+					Long aqcisitionDate = trainingSetList.get(i);
+					train_x [i] = aqcisitionDate.doubleValue();
+					train_y [i] = allPixelTimeSeries.get(position).get(aqcisitionDate);
+				}
+				
+				for (int i=0; i < testSetList.size(); i++) {
+					Long aqcisitionDate = testSetList.get(i);
+					test_x [i] = aqcisitionDate.doubleValue();
+					test_y [i] = allPixelTimeSeries.get(position).get(aqcisitionDate);
+				}
+				
+				//Build the SVM_Problem
+				svm_problem prob = new svm_problem();
+			    int countOfDates = train_x.length;
+			    prob.y = new double[countOfDates];
+			    prob.l = countOfDates;
+			    prob.x = new svm_node[countOfDates][]; 
+
+			    for (int i = 0; i < countOfDates; i++){            
+			        double value = train_y[i];
+			        prob.x[i] = new svm_node[1];
+			        svm_node node = new svm_node();
+			        node.index = 0;
+			        node.value = train_x[i];
+			        prob.x[i][0] = node;
+			        prob.y[i] = value;
+			    }   
+			    
+			    svm_parameter param = new svm_parameter();
+			    param.C = 1;
+			    param.eps = 0.1;
+			    param.svm_type = svm_parameter.EPSILON_SVR;
+			    param.kernel_type = svm_parameter.LINEAR;
+			    param.probability = 1;
+			    
+			    svm_model model = svm.svm_train(prob, param);
+			    System.out.println("The probA: " + model.probA[0]);
+			    
+			    double[] prediction_y = new double[test_x.length];
+			    for (int i = 0; i < test_x.length; i++) {
+			    	svm_node[] nodes = new svm_node[test_x.length];
+				    for (int j = 0; j < test_y.length; j++) {
+				        svm_node node = new svm_node();
+				        node.index = j;
+				        node.value = test_x[j];
+
+				        nodes[j] = node;
+				    }
+				    prediction_y[i] = svm.svm_predict(model, nodes);
+			    }
+			    
+			    for (int i = 0; i < test_x.length; i++) {
+			    	System.out.println("(Actual:" + test_y[i] + " Prediction:" + prediction_y[i] + ")");
+			    }
+			    
+			    //TODO: Get the missing values for every given acq date. Or can I use the function I receive directly?
+			    
+			    //Approx future data
+			}
 		}
 		
 		public ApproxInvalidValues (int slicedTileWidth, int slicedTileHeight) {

@@ -21,6 +21,7 @@ import java.io.Serializable;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -90,6 +91,7 @@ public class SlicedTile implements Serializable {
 
 				acquisitionDateInMilliseconds = date.getTime();  
 				} catch (ParseException e) {
+					//System.out.println("The parsing of the acqTime " + this.acquisitionDate + " to date failed");
 			}
 			
 			return acquisitionDateInMilliseconds;
@@ -169,7 +171,21 @@ public class SlicedTile implements Serializable {
 	public void setSlicedTileS16Tile(short[] slicedTileS16Tile) {
 		this.slicedTileS16Tile = slicedTileS16Tile;
 	}
-	
-	
+
+	@Override
+	public String toString() {
+		String newLine = System.getProperty("line.separator");
+		return "SlicedTile [acquisitionDate=" + acquisitionDate + newLine
+				+ ", band=" + band + newLine
+				+ ", positionInTile=" + positionInTile + newLine
+				+ ", slicedTileLeftUpperCoord=" + slicedTileLeftUpperCoord + newLine
+				+ ", slicedTileRightLowerCoord=" + slicedTileRightLowerCoord + newLine
+				//+ ", slicedTileS16Tile=" + Arrays.toString(slicedTileS16Tile) + newLine
+				+ ", slicedTileWidth=" + slicedTileWidth + newLine
+				+ ", slicedTileHeight=" + slicedTileHeight + newLine
+				+ ", upperLeftPosition=" + upperLeftPosition + newLine
+				+ ", lowerRightPosition=" + lowerRightPosition + newLine
+				+ ", edgeLength=" + edgeLength + "]";
+	}
 
 }
