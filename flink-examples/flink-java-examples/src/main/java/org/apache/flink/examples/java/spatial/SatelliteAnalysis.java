@@ -76,7 +76,6 @@ public class SatelliteAnalysis {
 		//Use the readTiles function from enviCube.java to read the given scenes as Tiles 
 		DataSet<Tile> tiles = readTiles(env);
 		//Slice the different tiles into multiple smaller tiles. Retains only relevant data for the chosen position 
-		//TODO: Dont group by acq date here. Just cut the scenes and group them later
 		DataSet<Tile> stitchedTimeSlices = tiles.groupBy(
 				new TileTimeKeySelector<Tile>()).reduceGroup(				//Returns the acquisition date of every tile
 				new TileStitchReduce().configure(leftUpper, rightLower,		//Returns all tiles which are relevant for the analysis at the given location
