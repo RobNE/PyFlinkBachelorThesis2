@@ -24,7 +24,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 
-import libsvm.*;
+import libsvm.svm_parameter;
+import libsvm.svm_model;
+import libsvm.svm_node;
+import libsvm.svm_problem;
+import libsvm.svm;
 
 import org.apache.commons.lang.ArrayUtils;
 //import org.apache.flink.api.common.functions.FilterFunction;
@@ -35,10 +39,8 @@ import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.api.java.operators.DataSink;
 //import org.apache.flink.api.java.operators.DataSink;
 import org.apache.flink.api.java.operators.DataSource;
-import org.apache.flink.api.java.operators.SortedGrouping;
 import org.apache.flink.api.java.spatial.Coordinate;
 import org.apache.flink.api.java.spatial.SlicedTile;
 import org.apache.flink.api.java.spatial.Tile;
@@ -254,7 +256,8 @@ public class SatelliteAnalysis {
 						short [] S16Tile = slicedTile.getSlicedTileS16Tile();
 						//Get the pixel value for the pixel at position row/col
 						try {
-							short pixelVegetationIndex = S16Tile[row + col];
+							//TODO: The calc of the vegIndex seems to be wrong.
+							short pixelVegetationIndex = S16Tile[row*slicedTileWidth + col];
 							Tuple2<Integer, Integer> position = new Tuple2<Integer, Integer>(col, row);
 							allPixelTimeSeries.get(position).put(acquisitionDate, pixelVegetationIndex);
 						} catch(Exception e) {
@@ -316,51 +319,50 @@ public class SatelliteAnalysis {
 				
 				//Build the SVM_Problem
 				svm_problem prob = new svm_problem();
-			    int countOfDates = train_x.length;
-			    prob.y = new double[countOfDates];
-			    prob.l = countOfDates;
-			    prob.x = new svm_node[countOfDates][]; 
+				int countOfDates = train_x.length;
+				prob.y = new double[countOfDates];
+				prob.l = countOfDates;
+				prob.x = new svm_node[countOfDates][];
+				
+				for (int i = 0; i < countOfDates; i++){
+					double value = train_y[i];
+					prob.x[i] = new svm_node[1];
+					svm_node node = new svm_node();
+					node.index = 0;
+					node.value = train_x[i];
+					prob.x[i][0] = node;
+					prob.y[i] = value;
+				}
 
-			    for (int i = 0; i < countOfDates; i++){            
-			        double value = train_y[i];
-			        prob.x[i] = new svm_node[1];
-			        svm_node node = new svm_node();
-			        node.index = 0;
-			        node.value = train_x[i];
-			        prob.x[i][0] = node;
-			        prob.y[i] = value;
-			    }   
-			    
-			    svm_parameter param = new svm_parameter();
-			    param.C = 1;
-			    param.eps = 0.1;
-			    param.svm_type = svm_parameter.EPSILON_SVR;
-			    param.kernel_type = svm_parameter.LINEAR;
-			    param.probability = 1;
-			    
-			    svm_model model = svm.svm_train(prob, param);
-			    System.out.println("The probA: " + model.probA[0]);
-			    
-			    double[] prediction_y = new double[test_x.length];
-			    for (int i = 0; i < test_x.length; i++) {
-			    	svm_node[] nodes = new svm_node[test_x.length];
-				    for (int j = 0; j < test_y.length; j++) {
-				        svm_node node = new svm_node();
-				        node.index = j;
-				        node.value = test_x[j];
-
-				        nodes[j] = node;
-				    }
-				    prediction_y[i] = svm.svm_predict(model, nodes);
-			    }
-			    
-			    for (int i = 0; i < test_x.length; i++) {
-			    	System.out.println("(Actual:" + test_y[i] + " Prediction:" + prediction_y[i] + ")");
-			    }
-			    
-			    //TODO: Get the missing values for every given acq date. Or can I use the function I receive directly?
-			    
-			    //Approx future data
+				svm_parameter param = new svm_parameter();
+				param.C = 1;
+				param.eps = 0.1;
+				param.svm_type = svm_parameter.EPSILON_SVR;
+				param.kernel_type = svm_parameter.LINEAR;	
+				param.probability = 1;
+	
+				svm_model model = svm.svm_train(prob, param);
+				System.out.println("The probA: " + model.probA[0]);
+		
+				double[] prediction_y = new double[test_x.length];
+				for (int i = 0; i < test_x.length; i++) {
+					svm_node[] nodes = new svm_node[test_x.length];
+					for (int j = 0; j < test_y.length; j++) {
+						svm_node node = new svm_node();
+						node.index = j;
+						node.value = test_x[j];
+						nodes[j] = node;
+					}
+					prediction_y[i] = svm.svm_predict(model, nodes);
+				}
+		
+				for (int i = 0; i < test_x.length; i++) {
+					System.out.println("(Actual:" + test_y[i] + " Prediction:" + prediction_y[i] + ")");
+				}
+		
+				//TODO: Get the missing values for every given acq date. Or can I use the function I receive directly?
+		
+				//Approx future data
 			}
 		}
 		

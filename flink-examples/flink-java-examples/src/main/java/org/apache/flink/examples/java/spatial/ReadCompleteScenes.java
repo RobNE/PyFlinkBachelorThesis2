@@ -43,9 +43,9 @@ public class ReadCompleteScenes {
 	private static int dop;
 	private static String filePath;
 	private static String pathRow;
-	private static int blockSize; // squared blocks for the beginning
+	//private static int blockSize; // squared blocks for the beginning
 	private static String outputFilePath;
-	private static int pixelSize;
+	//private static int pixelSize;
 
 	public static void main(String[] args) throws Exception {
 

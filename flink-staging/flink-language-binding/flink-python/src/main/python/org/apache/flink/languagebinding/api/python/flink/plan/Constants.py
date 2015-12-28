@@ -149,6 +149,40 @@ class Tile(object):
 
         return int(2 * (y * self._width + x))
 
+class SlicedTile(object):
+    
+    def __init__(self):
+        self._aquisitionDate = ""
+        self._pathRow = ""
+        self._leftUpperLat = 0.0
+        self._leftUpperLon = 0.0
+        self._rightLowerLat = 0.0
+        self._rightLowerLon = 0.0
+        self._width = -1
+        self._height = -1
+        self._band = -1
+        self._xPixelWidth = 0.0
+        self._yPixelWidth = 0.0
+        self._content = bytearray()
+        self.positionInTile = (-1, -1)
+    
+    def update(self, leftUpper, rightLower, width, height, band,
+               acquisitionDate, xPixelWidth, yPixelWidth, positionInTile):
+        leftUpperLat, leftUpperLon = leftUpper
+        rightLowerLat, rightLowerLon = rightLower
+
+        self.leftUpperLat = leftUpperLat
+        self.leftUpperLon = leftUpperLon
+        self.rightLowerLat = rightLowerLat
+        self.rightLowerLon = rightLowerLon
+        self.width = width
+        self.height = height
+        self.band = band
+        self.acquisitionDate = acquisitionDate
+        self.xPixelWidth = xPixelWidth
+        self.yPixelWidth = yPixelWidth
+        self.positionInTile = positionInTile
+
 class Cube(object):
     def __init__(self):
         """
