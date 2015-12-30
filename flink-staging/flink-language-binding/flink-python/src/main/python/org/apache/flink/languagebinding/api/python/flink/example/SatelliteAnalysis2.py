@@ -25,13 +25,16 @@ import scipy
 import matplotlib.pyplot as plt
 #from sklearn import svm
 
-from flink.plan.Environment import get_environment
+#from flink.plan.Environment import get_environment
 from flink.plan.Constants import TILE, STRING
 from flink.plan.Constants import Tile
 from flink.plan.Constants import SlicedTile
+from flink.plan.Constants import INT, STRING, WriteMode
 from flink.functions.FlatMapFunction import FlatMapFunction
 from flink.functions.GroupReduceFunction import GroupReduceFunction
 from flink.functions.KeySelectorFunction import KeySelectorFunction
+
+from flink.plan.Environment import get_environment
 
 class CubeCreator(GroupReduceFunction):
     def __init__(self, leftUpper=(0, 0), rightLower=(0, 0), xSize=0, ySize=0):
@@ -209,7 +212,7 @@ class ApproxInvalidValues(GroupReduceFunction):
                 test_y [i] = pixelTimeSeriesValues[acquisitionDate]
                 
             #Create the SVM Problem
-            
+            out.collect(currentPixelTimeSeries)
         
     def __init__(self,slicedTileWidth, slicedTileHeight):
         self.slicedTileWidth = slicedTileWidth
@@ -238,16 +241,26 @@ if __name__ == "__main__":
     leftUpper = (float(leftLat), float(leftLong))
     rightLower = (float(leftLat) - int(blockSize) * int(pixelSize),
                   float(leftLong) + int(blockSize) * int(pixelSize))
+    
+    output_file = "file:///Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/out/2.txt"
 
     data = env.read_envi(path, leftLong, leftLat, blockSize, pixelSize)
     pixelTimeSeries = data.group_by(AcqDateSelector(), STRING)\
         .reduce_group(CubeCreator(leftUpper, rightLower, int(blockSize), int(blockSize)), TILE)\
-        .flat_map(SliceDetailedBlocks(detailedBlockSize, detailedBlockSize), (Tile, SlicedTile))
+        .flat_map(SliceDetailedBlocks(detailedBlockSize, detailedBlockSize), (Tile, SlicedTile))\
+        .output()
         #.group_by(AcqDateSelector(), STRING)\
-        #.reduce_group(ApproxInvalidValues(), Tile)
-
-    env = get_environment
+        #.sort_group(AcqDateSelector(), STRING)\
         
+        #.reduce_group(ApproxInvalidValues(detailedBlockSize, detailedBlockSize), SlicedTile)\
+        
+        #
+        #.get_dataset()\
+        
+        #.write_text(output_file, write_mode=WriteMode.OVERWRITE)
+
+    env=get_environment()
+    
     env.set_degree_of_parallelism(dop)
 
     env.execute(local=True)
