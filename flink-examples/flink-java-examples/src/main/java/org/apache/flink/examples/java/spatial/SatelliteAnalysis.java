@@ -19,7 +19,6 @@ package org.apache.flink.examples.java.spatial;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -105,9 +104,9 @@ public class SatelliteAnalysis {
 		
 		//Until here everything seems to be valid. See /Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/out/1.txt
 		//Approximate the missing values for every group
-		DataSet<SlicedTile> slicedTilesSortedAndApproximated = dataSetReadyForAnalysis.reduceGroup(new ApproxInvalidValues(detailedBlockSize, detailedBlockSize));
+		DataSet<Double> slicedTilesSortedAndApproximated = dataSetReadyForAnalysis.reduceGroup(new ApproxInvalidValues(detailedBlockSize, detailedBlockSize)).setParallelism(dop);
 				
-		slicedTilesSortedAndApproximated.writeAsText(outputFilePath, WriteMode.OVERWRITE).setParallelism(2);		
+		slicedTilesSortedAndApproximated.writeAsText(outputFilePath, WriteMode.OVERWRITE).setParallelism(1);		
 		
 		//DataSink<SlicedTile> writeAsEnvi = 
 		//slicedTilesSortedAndApproximated.print();
@@ -224,7 +223,7 @@ public class SatelliteAnalysis {
 	 * Every instance of the groupReduce has access to every SlicedTile in a group.
 	 */
 	
-	public static final class ApproxInvalidValues implements GroupReduceFunction<SlicedTile, SlicedTile> {
+	public static final class ApproxInvalidValues implements GroupReduceFunction<SlicedTile, Double> {
 		//TODO: Import svr+ols libs, use them. Until here it is finished.
 		
 		private static final long serialVersionUID = 4L;
@@ -232,7 +231,7 @@ public class SatelliteAnalysis {
 		private int slicedTileHeight;
 
 		@Override
-		public void reduce(Iterable<SlicedTile> values, Collector<SlicedTile> out) throws Exception {
+		public void reduce(Iterable<SlicedTile> values, Collector<Double> out) throws Exception {
 			//Create a HashMap for every pixel of the slicedTile. The HashMaps consist of the corresponding pixelTimeSeries
 			System.out.println("The detailedBlockSize: " + slicedTileWidth + " " + slicedTileHeight);
 			HashMap<Tuple2<Integer, Integer>, HashMap<Long, Short>> allPixelTimeSeries = new HashMap<Tuple2<Integer, Integer>, HashMap<Long, Short>>(slicedTileWidth*slicedTileHeight);
@@ -275,46 +274,37 @@ public class SatelliteAnalysis {
 			//Check the size:
 			System.out.println("The size of the allPixelTimeSeriesList (should be row*col): " + allPixelTimeSeriesList.size());
 			
-			//Training set size is 80 percent of the dataset size
-			int trainingSetSize = 1;
-			//int trainingSetSize = (int) Math.round(allDates.size()*0.8);
-
 			//Construct a LIVBSVM problem for every timePixelSeries (= for every position)
 			for (Tuple2<Integer, Integer> position : allPixelTimeSeriesList) {
+				List<Long>trainingSetList = new ArrayList<Long>(allPixelTimeSeries.get(position).keySet());
+				int trainingSetSize = trainingSetList.size();
 				double[] train_x = new double[trainingSetSize]; 
-				double[] test_x = new double[allDates.size() - trainingSetSize];
+				//double[] test_x = new double[allDates.size() - trainingSetSize];
 				double[] train_y = new double[trainingSetSize]; 
-				double[] test_y = new double[allDates.size() - trainingSetSize];
+				//double[] test_y = new double[allDates.size() - trainingSetSize];
 				
 				//Set the train and test values randomly
-				List<Long>allAcquisitionDatesListShuffled = new ArrayList<Long>(allPixelTimeSeries.get(position).keySet());
-				Collections.shuffle(allAcquisitionDatesListShuffled);
-				System.out.println("The allDatesList: " + allAcquisitionDatesListShuffled);
+				//List<Long>allAcquisitionDatesListShuffled = new ArrayList<Long>(allPixelTimeSeries.get(position).keySet());
+				//Collections.shuffle(allAcquisitionDatesListShuffled);
+				//System.out.println("The allDatesList: " + allAcquisitionDatesListShuffled);
 				
 				//For testing only (atm I only have two different scenes):
-				List<Long>trainingSetList = new ArrayList<Long>(allAcquisitionDatesListShuffled.subList(0, 1));
-				List<Long>testSetList = new ArrayList<Long>(allAcquisitionDatesListShuffled.subList(1, 2));
+				//List<Long>trainingSetList = new ArrayList<Long>(allPixelTimeSeries.get(position).keySet());
+				//List<Long>trainingSetList = new ArrayList<Long>(allAcquisitionDatesListShuffled.subList(0, 1));
+				//List<Long>testSetList = new ArrayList<Long>(allAcquisitionDatesListShuffled.subList(1, 2));
 				
 				//List<Long>trainingSetList = new ArrayList<Long>(allAcquisitionDatesList.subList(0, trainingSetSize));
 				//List<Long>testSetList = new ArrayList<Long>(allAcquisitionDatesList.subList(trainingSetSize, allDatesList.size()-1));
 				
 				//Sort the lists to get properly ordered time series
-				Collections.sort(trainingSetList);
-				Collections.sort(testSetList);
+				//Collections.sort(trainingSetList);
 				
-				System.out.println("The testList: " + testSetList);
 				System.out.println("The trainingList: " + trainingSetList);
 				
 				for (int i=0; i < trainingSetList.size(); i++) {
 					Long aqcisitionDate = trainingSetList.get(i);
 					train_x [i] = aqcisitionDate.doubleValue();
 					train_y [i] = allPixelTimeSeries.get(position).get(aqcisitionDate);
-				}
-				
-				for (int i=0; i < testSetList.size(); i++) {
-					Long aqcisitionDate = testSetList.get(i);
-					test_x [i] = aqcisitionDate.doubleValue();
-					test_y [i] = allPixelTimeSeries.get(position).get(aqcisitionDate);
 				}
 				
 				//Build the SVM_Problem
@@ -343,7 +333,10 @@ public class SatelliteAnalysis {
 	
 				svm_model model = svm.svm_train(prob, param);
 				System.out.println("The probA: " + model.probA[0]);
+				
+				out.collect(model.probA[0]);
 		
+				/*
 				double[] prediction_y = new double[test_x.length];
 				for (int i = 0; i < test_x.length; i++) {
 					svm_node[] nodes = new svm_node[test_x.length];
@@ -358,11 +351,9 @@ public class SatelliteAnalysis {
 		
 				for (int i = 0; i < test_x.length; i++) {
 					System.out.println("(Actual:" + test_y[i] + " Prediction:" + prediction_y[i] + ")");
-				}
+				}*/
 		
 				//TODO: Get the missing values for every given acq date. Or can I use the function I receive directly?
-		
-				//Approx future data
 			}
 		}
 		
