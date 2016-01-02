@@ -23,7 +23,9 @@ import random
 from numpy import abs, ones
 import scipy
 import matplotlib.pyplot as plt
-#from sklearn import svm
+import numpy 
+import scipy
+from sklearn import svm
 
 #from flink.plan.Environment import get_environment
 from flink.plan.Constants import TILE, STRING
@@ -157,7 +159,7 @@ class SliceDetailedBlocks(FlatMapFunction):
                 slicedTile._positionInTile = (row, col)
                 
                 collector.collect(slicedTile)
-        #TODO: Add acqDate to allDates
+                
         self.allDatesList.append(value._aquisitionDate)
         
 class ApproxInvalidValues(GroupReduceFunction):
@@ -178,40 +180,33 @@ class ApproxInvalidValues(GroupReduceFunction):
                     S16Tile = slicedTile._content
                     try:
                         #TODO: Check whether the assignment of the arrays works as expected
-                        pixelVegetationIndex = S16Tile[row+col]
+                        pixelVegetationIndex = S16Tile[row*slicedTileWidth+col]
                         currentPixelTimeSeries = allPixelTimeSeries[(row, col)]
                         currentPixelTimeSeries[acquisitionDate] = pixelVegetationIndex
                     except:
                         print("the vegIndex gave an error")
         
-        trainingSetSize = round(self.allDatesList.length)
+        trainingSetSize = self.allDatesList.length
         
         for position in allPixelTimeSeries:
-            train_x, test_x, train_y, test_y
+            train_x, train_y
             
             currentPixelTimeSeries = allPixelTimeSeries[position]
             currentPixelTimeSeriesKeys = currentPixelTimeSeries.keys()
-            random.shuffle(currentPixelTimeSeriesKeys)
             
-            trainingSetList = currentPixelTimeSeriesKeys[0:trainingSetSize]
-            testSetList = currentPixelTimeSeriesKeys[trainingSetSize:currentPixelTimeSeriesKeys.length]
-            
-            trainingSetList.sort()
-            testSetList.sort()
+            trainingSetList = currentPixelTimeSeriesKeys
             
             for i in range (0, trainingSetList.length):
                 acquisitionDate = trainingSetList[i]
                 train_x [i] = aquisitionDate
                 pixelTimeSeriesValues = allPixelTimeSeries[position]
                 train_y [i] = pixelTimeSeriesValues[acquisitionDate]
-                
-            for i in range (0, testSetList.length):
-                acquisitionDate = testSetList[i]
-                test_x [i] = aquisitionDate
-                pixelTimeSeriesValues = allPixelTimeSeries[position]
-                test_y [i] = pixelTimeSeriesValues[acquisitionDate]
-                
+            
             #Create the SVM Problem
+            svr = svm.SVR(gamma=1./(2.*(3/12.)**2), C=1, epsilon=0.1)
+            svr.fit(train_x.reshape([-1,1]), train_y, sample_weight=None)
+            
+            
             out.collect(currentPixelTimeSeries)
         
     def __init__(self,slicedTileWidth, slicedTileHeight):

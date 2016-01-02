@@ -21,6 +21,7 @@ import java.io.Serializable;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -179,7 +180,7 @@ public class SlicedTile implements Serializable {
 				+ ", positionInTile=" + positionInTile + newLine
 				+ ", slicedTileLeftUpperCoord=" + slicedTileLeftUpperCoord + newLine
 				+ ", slicedTileRightLowerCoord=" + slicedTileRightLowerCoord + newLine
-				//+ ", slicedTileS16Tile=" + Arrays.toString(slicedTileS16Tile) + newLine
+				+ ", slicedTileS16Tile=" + Arrays.toString(slicedTileS16Tile) + newLine
 				+ ", slicedTileWidth=" + slicedTileWidth + newLine
 				+ ", slicedTileHeight=" + slicedTileHeight + newLine
 				+ ", upperLeftPosition=" + upperLeftPosition + newLine
