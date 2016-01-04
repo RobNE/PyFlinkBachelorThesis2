@@ -55,19 +55,19 @@ public class SlicedTile implements Serializable {
 		this.positionInTile = positionInTile;
 	}
 
-	public Tuple2<Integer, Integer> getUpperLeftPosition() {
+	public Tuple2<Double, Double> getUpperLeftPosition() {
 		return upperLeftPosition;
 	}
 
-	public void setUpperLeftPosition(Tuple2<Integer, Integer> upperLeftPosition) {
+	public void setUpperLeftPosition(Tuple2<Double, Double> upperLeftPosition) {
 		this.upperLeftPosition = upperLeftPosition;
 	}
 
-	public Tuple2<Integer, Integer> getLowerRightPosition() {
+	public Tuple2<Double, Double> getLowerRightPosition() {
 		return lowerRightPosition;
 	}
 
-	public void setLowerRightPosition(Tuple2<Integer, Integer> lowerRightPosition) {
+	public void setLowerRightPosition(Tuple2<Double, Double> lowerRightPosition) {
 		this.lowerRightPosition = lowerRightPosition;
 	}
 
@@ -98,11 +98,11 @@ public class SlicedTile implements Serializable {
 		}
 	}
 
-	private Tuple2<Integer, Integer> upperLeftPosition; //Tuple2<x, y>
-	private Tuple2<Integer, Integer> lowerRightPosition; //Tuple2<x, y> Maybe obsolete
+	private Tuple2<Double, Double> upperLeftPosition; //Tuple2<x, y>
+	private Tuple2<Double, Double> lowerRightPosition; //Tuple2<x, y> Maybe obsolete
 	private int edgeLength;
 	
-	public SlicedTile (String acquisitionDate, Tuple2<Integer, Integer> positionInTile, Tuple2<Integer, Integer> upperLeftPosition, int edgeLength) {
+	public SlicedTile (String acquisitionDate, Tuple2<Integer, Integer> positionInTile, Tuple2<Double, Double> upperLeftPosition, int edgeLength) {
 		this.acquisitionDate = acquisitionDate;
 		this.positionInTile = positionInTile;
 		this.upperLeftPosition = upperLeftPosition;

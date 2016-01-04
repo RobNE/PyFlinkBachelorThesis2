@@ -108,7 +108,7 @@ class CubeCreator(GroupReduceFunction):
                             result._content[index] = px_value[0]
                             result._content[index+1] = px_value[1]
 
-                collector.collect(result)
+            collector.collect(result)
 
         print("inside", inside_counter)
         print("known_counter", known_counter)

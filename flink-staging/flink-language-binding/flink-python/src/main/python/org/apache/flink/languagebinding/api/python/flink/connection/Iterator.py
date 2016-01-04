@@ -17,7 +17,7 @@
 ################################################################################
 from struct import unpack
 from collections import deque
-from flink.plan.Constants import Tile
+from flink.plan.Constants import Tile, SlicedTile
 
 try:
     import _abcoll as defIter
@@ -377,3 +377,40 @@ class TileDeserializer(object):
             tile._content = self._bytesSerializer.deserialize()
 
         return tile
+    
+class SlicedTileDeserializer(object):
+    def __init__(self, read, group):
+        self.read = read
+        self._group = group
+        self._stringSerializer = StringDeserializer(read, group)
+        self._boolSerializer = BooleanDeserializer(read, group)
+        self._intSerializer = IntegerDeserializer(read, group)
+        self._doubleSerializer = DoubleDeserializer(read, group)
+        self._bytesSerializer = ByteArrayDeserializer(read, group)
+        self._tupleSerializer = TupleDeserializer(read, group)
+
+    def deserialize(self):
+        slicedTile = SlicedTile()
+        isAckDate = self._boolSerializer.deserialize()
+        if isAckDate > 0:
+            slicedTile._aquisitionDate = self._stringSerializer.deserialize()
+
+        slicedTile._band = self._intSerializer.deserialize()
+
+        slicedTile._leftUpperLon = self._doubleSerializer.deserialize()
+        slicedTile._leftUpperLat = self._doubleSerializer.deserialize()
+        slicedTile._rightLowerLon = self._doubleSerializer.deserialize()
+        slicedTile._rightLowerLat = self._doubleSerializer.deserialize()
+
+        slicedTile._height = self._intSerializer.deserialize()
+        slicedTile._width = self._intSerializer.deserialize()
+
+        hasContent = self._boolSerializer.deserialize()
+        if hasContent > 0:
+            slicedTile._content = self._bytesSerializer.deserialize()
+
+        row = self._intSerializer.deserialize()
+        col = self._intSerializer.deserialize()
+        slicedTile._positionInTile = row, col
+
+        return slicedTile

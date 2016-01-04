@@ -153,7 +153,6 @@ class SlicedTile(object):
     
     def __init__(self):
         self._aquisitionDate = ""
-        self._pathRow = ""
         self._leftUpperLat = 0.0
         self._leftUpperLon = 0.0
         self._rightLowerLat = 0.0
@@ -161,27 +160,22 @@ class SlicedTile(object):
         self._width = -1
         self._height = -1
         self._band = -1
-        self._xPixelWidth = 0.0
-        self._yPixelWidth = 0.0
         self._content = bytearray()
-        self.positionInTile = (-1, -1)
+        self._positionInTile = (-1, -1)
     
-    def update(self, leftUpper, rightLower, width, height, band,
-               acquisitionDate, xPixelWidth, yPixelWidth, positionInTile):
+    def update(self, leftUpper, rightLower, width, height, band, acquisitionDate, positionInTile):
         leftUpperLat, leftUpperLon = leftUpper
         rightLowerLat, rightLowerLon = rightLower
 
-        self.leftUpperLat = leftUpperLat
-        self.leftUpperLon = leftUpperLon
-        self.rightLowerLat = rightLowerLat
-        self.rightLowerLon = rightLowerLon
-        self.width = width
-        self.height = height
-        self.band = band
-        self.acquisitionDate = acquisitionDate
-        self.xPixelWidth = xPixelWidth
-        self.yPixelWidth = yPixelWidth
-        self.positionInTile = positionInTile
+        self._leftUpperLat = leftUpperLat
+        self._leftUpperLon = leftUpperLon
+        self._rightLowerLat = rightLowerLat
+        self._rightLowerLon = rightLowerLon
+        self._width = width
+        self._height = height
+        self._band = band
+        self._acquisitionDate = acquisitionDate
+        self._positionInTile = positionInTile
 
 class Cube(object):
     def __init__(self):
@@ -213,6 +207,7 @@ if PY2:
     TILE = Tile()
     CUBE = Cube()
     TIMESERIES = TimeSeries()
+    SLICEDTILE = SlicedTile()
 elif PY3:
     BOOL = True
     INT = 1
@@ -222,3 +217,4 @@ elif PY3:
     TILE = Tile()
     CUBE = Cube()
     TIMESERIES = TimeSeries()
+    SLICEDTILE = SlicedTile()

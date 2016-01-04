@@ -23,20 +23,15 @@ import random
 from numpy import abs, ones
 import scipy
 import matplotlib.pyplot as plt
-import numpy 
-import scipy
 from sklearn import svm
 
-#from flink.plan.Environment import get_environment
-from flink.plan.Constants import TILE, STRING
-from flink.plan.Constants import Tile
-from flink.plan.Constants import SlicedTile
-from flink.plan.Constants import INT, STRING, WriteMode
+from flink.plan.Environment import get_environment
+from flink.plan.Constants import TILE, SLICEDTILE, INT, STRING, Tile, SlicedTile, WriteMode
 from flink.functions.FlatMapFunction import FlatMapFunction
 from flink.functions.GroupReduceFunction import GroupReduceFunction
 from flink.functions.KeySelectorFunction import KeySelectorFunction
 
-from flink.plan.Environment import get_environment
+NOVAL = pack("<h", -9999)
 
 class CubeCreator(GroupReduceFunction):
     def __init__(self, leftUpper=(0, 0), rightLower=(0, 0), xSize=0, ySize=0):
@@ -105,11 +100,24 @@ class CubeCreator(GroupReduceFunction):
                             result._content[index] = px_value[0]
                             result._content[index+1] = px_value[1]
 
-                collector.collect(result)
+            collector.collect(result)
 
         print("inside", inside_counter)
         print("known_counter", known_counter)
         print("orig not null", orig_not_null_counter)
+        
+def coord_iter(tile):
+    lon = tile._leftUpperLon
+    lat = tile._leftUpperLat
+    yield (0, (lat, lon))
+    if len(tile._content) > 2:
+        for i in range(2, len(tile._content), 2):
+            if i % tile._width == 0:
+                lon = tile._leftUpperLon
+                lat -= tile._yPixelWidth
+            else:
+                lon += tile._xPixelWidth
+            yield (i, (lat, lon))
 
 class AcqDateSelector(KeySelectorFunction):
     def get_key(self, value):
@@ -119,15 +127,18 @@ class SliceDetailedBlocks(FlatMapFunction):
     #slicedTileWidth, slicedTileHeight, originalTileWidht, originalTileHeight
     
     def __init__(self,slicedTileWidth, slicedTileHeight):
+        super(SliceDetailedBlocks, self).__init__()
         self.slicedTileWidth = slicedTileWidth
         self.slicedTileHeight = slicedTileHeight
         
     def flatMap(self, iterator, collector):
+        print("The flatmap starts")
         self.originalTileHeight = value.getTileHeight()
         self.originalTileWidth = value.getTileWidth()
         slicedTilesPerRow = self.originalTileWidth / self.slicedTileWidth
         slicedTilesPerCol = self.originalTileHeight / self.slicedTileHeight
         originalTileS16Tile = value._content
+        
         
         for row in range (0, slicedTilesPerRow):
             for col in range (0, slicedTilesPerCol):
@@ -161,12 +172,14 @@ class SliceDetailedBlocks(FlatMapFunction):
                 collector.collect(slicedTile)
                 
         self.allDatesList.append(value._aquisitionDate)
+        print("The flatmap is over")
         
 class ApproxInvalidValues(GroupReduceFunction):
     def reduce(self, iterator, collector):
         allPixelTimeSeries = {} #the dic containing all pixelTimeSeries
         pixelTimeSeries = {} #a pixelTimeSeries
         positionInTile #the position of a pixelTimeSeries (funcs as the key for the main dic)
+        slicedTiles = []
         
         for row in range (0, slicedTileHeight):
             for col in range (0, slicedTileWidth):
@@ -185,6 +198,7 @@ class ApproxInvalidValues(GroupReduceFunction):
                         currentPixelTimeSeries[acquisitionDate] = pixelVegetationIndex
                     except:
                         print("the vegIndex gave an error")
+            slicedTiles.append(slicedTile)
         
         trainingSetSize = self.allDatesList.length
         
@@ -206,10 +220,27 @@ class ApproxInvalidValues(GroupReduceFunction):
             svr = svm.SVR(gamma=1./(2.*(3/12.)**2), C=1, epsilon=0.1)
             svr.fit(train_x.reshape([-1,1]), train_y, sample_weight=None)
             
+            def f(x, m, n):
+                return m*x+n
             
-            out.collect(currentPixelTimeSeries)
+            fitpars, covmat = scipy.optimize.curve_fit(f, x.flatten(), y)
+            print('observed:', y)
+            print('predicted:', f(x.flatten(), *fitpars))
+            
+            
+        for slicedTile in slicedTiles:
+            aquisitionDate = slicedTile._acquisitionDate
+            for row in range (0, self.slicedTileHeight):
+                for col in range (0, self.slicedTileWidth):
+                    S16Tile = slicedTile._content
+                    position = row, col
+                    pixelVegetationIndex = allPixelTimeSeries.get(position).get(aquisitionDate)
+                    S16tile[row*self.slicedTileWidth + col] = pixelVegetationIndex
+                    slicedTile._content = S16Tile
+            out.collect(slicedTile)
         
     def __init__(self,slicedTileWidth, slicedTileHeight):
+        super(ApproxInvalidValues, self).__init__()
         self.slicedTileWidth = slicedTileWidth
         self.slicedTileHeight = slicedTileHeight 
         
@@ -242,20 +273,19 @@ if __name__ == "__main__":
     data = env.read_envi(path, leftLong, leftLat, blockSize, pixelSize)
     pixelTimeSeries = data.group_by(AcqDateSelector(), STRING)\
         .reduce_group(CubeCreator(leftUpper, rightLower, int(blockSize), int(blockSize)), TILE)\
-        .flat_map(SliceDetailedBlocks(detailedBlockSize, detailedBlockSize), (Tile, SlicedTile))\
-        .output()
+        .flat_map(SliceDetailedBlocks(detailedBlockSize, detailedBlockSize), SLICEDTILE)\
+        .group_by(AcqDateSelector(), STRING)\
+        .sort_group(AcqDateSelector(), Order.ASCENDING)\
+        .reduce_group(ApproxInvalidValues(detailedBlockSize, detailedBlockSize), SLICEDTILE)\
+        .write_text(output_file, write_mode=WriteMode.OVERWRITE)
         #.group_by(AcqDateSelector(), STRING)\
         #.sort_group(AcqDateSelector(), STRING)\
         
-        #.reduce_group(ApproxInvalidValues(detailedBlockSize, detailedBlockSize), SlicedTile)\
+        #.group_by(AcqDateSelector(), STRING)\
+        #.sort_group(AcqDateSelector(), STRING)\
+        #.reduce_group(ApproxInvalidValues(detailedBlockSize, detailedBlockSize), SLICEDTILE)\
         
-        #
-        #.get_dataset()\
-        
-        #.write_text(output_file, write_mode=WriteMode.OVERWRITE)
-
-    env=get_environment()
-    
+    print("dop: ", dop)
     env.set_degree_of_parallelism(dop)
 
     env.execute(local=True)

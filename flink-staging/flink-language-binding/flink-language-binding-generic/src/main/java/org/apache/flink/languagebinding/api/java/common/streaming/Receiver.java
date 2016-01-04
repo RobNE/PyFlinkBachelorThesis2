@@ -21,15 +21,19 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+
 import org.apache.flink.api.common.functions.AbstractRichFunction;
 //CHECKSTYLE.OFF: AvoidStarImport - tuple imports
 import org.apache.flink.api.java.spatial.Coordinate;
 import org.apache.flink.api.java.spatial.Tile;
+import org.apache.flink.api.java.spatial.SlicedTile;
 import org.apache.flink.api.java.tuple.*;
+
 import static org.apache.flink.languagebinding.api.java.common.streaming.Sender.*;
 //CHECKSTYLE.ON: AvoidStarImport
 import static org.apache.flink.languagebinding.api.java.common.PlanBinder.FLINK_TMP_DATA_DIR;
 import static org.apache.flink.languagebinding.api.java.common.PlanBinder.MAPPED_FILE_SIZE;
+
 import org.apache.flink.util.Collector;
 
 /**
@@ -191,6 +195,8 @@ public class Receiver implements Serializable {
 				return null;
 			case TYPE_TILE:
 				return new TileDeserializer().deserialize();
+			case TYPE_SLICEDTILE:
+				return new SlicedTileDeserializer().deserialize();
 			default:
 				throw new IllegalArgumentException("Unknown TypeID encountered: " + type);
 		}
@@ -245,6 +251,8 @@ public class Receiver implements Serializable {
 				return new NullDeserializer();
 			case TYPE_TILE:
 				return new TileDeserializer();
+			case TYPE_SLICEDTILE:
+				return new SlicedTileDeserializer();
 			default:
 				throw new IllegalArgumentException("Unknown TypeID encountered: " + type);
 
@@ -402,6 +410,59 @@ public class Receiver implements Serializable {
 					.get(data);
 
 			this.reuse.setS16Tile(data);
+			return this.reuse;
+		}
+
+	}
+	
+	private class SlicedTileDeserializer implements Deserializer<SlicedTile> {
+
+		private StringDeserializer stringDes;
+		private DoubleDeserializer doubleDes;
+		private LongDeserializer intDes;
+		private BytesDeserializer bytesDes;
+		//TODO: check if this is still in line with the serialization approach of Flink
+		SlicedTile reuse;
+
+		public SlicedTileDeserializer() {
+			this.stringDes = new StringDeserializer();
+			this.intDes = new LongDeserializer();
+			this.doubleDes = new DoubleDeserializer();
+			this.bytesDes = new BytesDeserializer();
+			this.reuse = new SlicedTile();
+		}
+
+
+		@Override
+		public SlicedTile deserialize() {
+			this.reuse.setAqcuisitionDate(this.stringDes.deserialize());
+			this.reuse.setBand(this.intDes.deserialize().intValue());
+
+			double luLon = this.doubleDes.deserialize();
+			double luLat = this.doubleDes.deserialize();
+			//Coordinate leftUpper = new Coordinate(luLon, luLat);
+			this.reuse.setUpperLeftPosition(new Tuple2<Double, Double>(luLon, luLat));
+
+			double rlLon = this.doubleDes.deserialize();
+			double rlLat = this.doubleDes.deserialize();
+			//Coordinate rightLower = new Coordinate(rlLon, rlLat);
+			this.reuse.setLowerRightPosition(new Tuple2<Double, Double>(rlLon, rlLat));
+
+			this.reuse.setSlicedTileHeight(this.intDes.deserialize().intValue());
+			this.reuse.setSlicedTileWidth(this.intDes.deserialize().intValue());
+
+			
+			byte[] bytes = this.bytesDes.deserialize();
+			short[] data = new short[bytes.length / 2];
+			ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+					.get(data);
+
+			this.reuse.setSlicedTileS16Tile(data);
+			Integer row = this.intDes.deserialize().intValue();
+			Integer col = this.intDes.deserialize().intValue();
+			
+			Tuple2<Integer, Integer> positionInTile = new Tuple2<Integer, Integer>(row, col);
+			this.reuse.setPositionInTile(positionInTile);
 			return this.reuse;
 		}
 

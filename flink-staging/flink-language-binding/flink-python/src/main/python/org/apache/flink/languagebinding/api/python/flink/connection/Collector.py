@@ -19,7 +19,7 @@ from struct import pack
 import sys
 
 from flink.connection.Constants import Types
-from flink.plan.Constants import Tile
+from flink.plan.Constants import Tile, SlicedTile
 
 PY2 = sys.version_info[0] == 2
 PY3 = sys.version_info[0] == 3
@@ -77,7 +77,11 @@ def _get_serializer(write, value):
     elif isinstance(value, Tile):
         write(Types.TYPE_TILE)
         return TileSerializer(write, value)
+    elif isinstance(value, SlicedTile):
+        write(Types.TYPE_SLICEDTILE)
+        return SlicedTileSerializer(write, value)
     else:
+        print(type(value))
         raise Exception("Unsupported Type encountered.")
 
 
@@ -119,6 +123,32 @@ class TileSerializer(object):
         bits.append(self._doubleSerializer.serialize(value._xPixelWidth))
         bits.append(self._doubleSerializer.serialize(value._yPixelWidth))
         bits.append(self._bytesSerializer.serialize(value._content))
+        return b"".join(bits)
+    
+class SlicedTileSerializer(object):
+    def __init__(self, write, value):
+        self._boolSerializer = BooleanSerializer()
+        self._longSerializer = LongSerializer()
+        self._stringSerializer = StringSerializer()
+        self._bytesSerializer = ByteArraySerializer()
+        self._doubleSerializer = FloatSerializer()
+
+    def serialize(self, value):
+        bits = []
+        """TODO: remove check isNull checks from Tile Serialization for pathRow, ackDate and Content """
+        bits.append(self._stringSerializer.serialize(value._aquisitionDate))
+        bits.append(self._longSerializer.serialize(value._band))
+        bits.append(self._doubleSerializer.serialize(value._leftUpperLon))
+        bits.append(self._doubleSerializer.serialize(value._leftUpperLat))
+        bits.append(self._doubleSerializer.serialize(value._rightLowerLon))
+        bits.append(self._doubleSerializer.serialize(value._rightLowerLat))
+        bits.append(self._longSerializer.serialize(value._height))
+        bits.append(self._longSerializer.serialize(value._width))
+        if not (value._content is None):
+            print("This is the value: " + str(value._content))
+            bits.append(self._bytesSerializer.serialize(value._content))
+        bits.append(self._longSerializer.serialize(value._positionInTile[0]))
+        bits.append(self._longSerializer.serialize(value._positionInTile[1]))
         return b"".join(bits)
 
 class FloatSerializer(object):
@@ -192,5 +222,10 @@ class TypedCollector(object):
         elif isinstance(value, Tile):
             s_value = TileSerializer(None, None).serialize(value)
             self._connection.write(b"".join([Types.TYPE_TILE, s_value]))
+        elif isinstance(value, SlicedTile):
+            s_value = SlicedTileSerializer(None, None).serialize(value)
+            self._connection.write(b"".join([Types.TYPE_SLICEDTILE, s_value]))
         else:
-            raise Exception("Unsupported Type encountered.")
+            print(1)
+            print(type(value))
+            raise Exception("Unsupported Type encountered:" + str(type(value)))

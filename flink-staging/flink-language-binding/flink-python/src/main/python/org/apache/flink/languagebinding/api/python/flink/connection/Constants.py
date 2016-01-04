@@ -19,6 +19,7 @@
 
 class Types(object):
     TYPE_TILE = b'\x0C'
+    TYPE_SLICEDTILE = b'\x0D'
     TYPE_TUPLE = b'\x0B'
     TYPE_BOOLEAN = b'\x0A'
     TYPE_BYTE = b'\x09'

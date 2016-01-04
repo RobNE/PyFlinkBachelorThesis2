@@ -51,6 +51,7 @@ import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.core.fs.Path;
 //import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.util.Collector;
+import org.apache.commons.math.stat.regression.OLSMultipleLinearRegression;
 
 public class SatelliteAnalysis {
 	
@@ -86,27 +87,25 @@ public class SatelliteAnalysis {
 		//for every group are approximated and inserted in the group.
 		//TODO: Add a groupReduce to approx future values.
 		DataSet<SlicedTile> slicedTiles = stitchedTimeSlices.flatMap(new SliceDetailedBlocks(detailedBlockSize, detailedBlockSize));
-		DataSet<SlicedTile> dataSetReadyForAnalysis = slicedTiles
+		DataSet<SlicedTile> slicedTilesSortedAndApproximated = slicedTiles
 				//Group the slicedTiles by their position and the respective band
-				.groupBy(new KeySelector<SlicedTile, Tuple2<Tuple2<Integer, Integer>, Long>>() {
+				.groupBy(new KeySelector<SlicedTile, Tuple2<Tuple2<Integer, Integer>, Integer>>() {
 					private static final long serialVersionUID = 5L;
-					Tuple2<Tuple2<Integer, Integer>, Long> groupingKey = new Tuple2<Tuple2<Integer, Integer>, Long>();
+					Tuple2<Tuple2<Integer, Integer>, Integer> groupingKey = new Tuple2<Tuple2<Integer, Integer>, Integer>();
 
-					public Tuple2<Tuple2<Integer, Integer>, Long> getKey(SlicedTile s) {
+					public Tuple2<Tuple2<Integer, Integer>, Integer> getKey(SlicedTile s) {
 						groupingKey.setField(s.getPositionInTile(), 0);
-						groupingKey.setField(Long.parseLong(s.getAqcuisitionDate(), 20), 1);
+						groupingKey.setField(s.getBand(), 1);
 						return groupingKey; 
 					}
 				})
                 //Sort every group of SlicedTiles by their acqTime	
 				.sortGroup(new SlicedTileTimeKeySelector<SlicedTile>(), Order.ASCENDING)
-				.getDataSet();
+				//Until here everything seems to be valid. See /Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/out/1.txt
+				.reduceGroup(new ApproxInvalidValues(detailedBlockSize, detailedBlockSize));
 		
-		//Until here everything seems to be valid. See /Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/out/1.txt
-		//Approximate the missing values for every group
-		DataSet<SlicedTile> slicedTilesSortedAndApproximated = dataSetReadyForAnalysis.reduceGroup(new ApproxInvalidValues(detailedBlockSize, detailedBlockSize));
 				
-		slicedTilesSortedAndApproximated.writeAsText(outputFilePath, WriteMode.OVERWRITE).setParallelism(2);
+		slicedTilesSortedAndApproximated.writeAsText(outputFilePath, WriteMode.OVERWRITE).setParallelism(1);
 			
 		env.execute("Data Cube Creation");
 	}
@@ -211,7 +210,7 @@ public class SatelliteAnalysis {
 
 		@Override
 		public Long getKey(SlicedTile value) throws Exception {
-			return Long.parseLong(value.getAqcuisitionDate(), 20);
+			return Long.parseLong(value.getAqcuisitionDate(), 10);
 		}
 	}
 	
@@ -233,8 +232,6 @@ public class SatelliteAnalysis {
 			System.out.println("The detailedBlockSize: " + slicedTileWidth + " " + slicedTileHeight);
 			HashMap<Tuple2<Integer, Integer>, HashMap<Long, Short>> allPixelTimeSeries = new HashMap<Tuple2<Integer, Integer>, HashMap<Long, Short>>(slicedTileWidth*slicedTileHeight);
 			
-			
-			
 			//Init the array with empty pixelTimeSeries for every pixel
 			for (int row = 0; row < slicedTileHeight; row++) {
 				for (int col = 0; col < slicedTileWidth; col++) {
@@ -246,7 +243,7 @@ public class SatelliteAnalysis {
 			ArrayList<SlicedTile> slicedTiles = new ArrayList<SlicedTile>();
 			//Insert the values into the pixelTimeSeries
 			for (SlicedTile slicedTile : values) {
-				long acquisitionDate = Long.parseLong(slicedTile.getAqcuisitionDate(), 20);
+				long acquisitionDate = Long.parseLong(slicedTile.getAqcuisitionDate(), 10);
 				for (int row = 0; row < slicedTileHeight; row++) {
 					for (int col = 0; col < slicedTileWidth; col++) {
 						short [] S16Tile = slicedTile.getSlicedTileS16Tile();
@@ -293,6 +290,7 @@ public class SatelliteAnalysis {
 				prob.y = new double[countOfDates];
 				prob.l = countOfDates;
 				prob.x = new svm_node[countOfDates][];
+				System.out.println("The count of dates: " + countOfDates);
 				
 				for (int i = 0; i < countOfDates; i++){
 					double value = train_y[i];
@@ -314,14 +312,37 @@ public class SatelliteAnalysis {
 	
 				svm_model model = svm.svm_train(prob, param);
 				
-				double predictedValues = svm.svm_predict(model, predict_x);
+				double predictedValuesSVR = svm.svm_predict(model, predict_x);
 				
-				System.out.println("The predicted values: " + predictedValues);
+				System.out.println("The predicted values after SVR: " + predictedValuesSVR);
+				
+				double[][] olsProblem_x = new double[countOfDates][];
+				double[] olsProblem_y = new double[countOfDates];
+				
+				for (int i = 0; i < countOfDates; i++){
+					double value = train_y[i];
+					olsProblem_x[i] = new double[1];
+					olsProblem_x[i][0] = train_x[i];
+					olsProblem_y[i] = value;
+				}
+				
+				System.out.println("X-length: " + olsProblem_x.length);
+				System.out.println("Y-length: " + olsProblem_y.length);
+				
+				OLSMultipleLinearRegression regressionProblem = new OLSMultipleLinearRegression();
+				//regressionProblem.newSampleData(olsProblem_y, olsProblem_x);
+				//regressionProblem.newSampleData(olsProblem_y, countOfDates, 0);
+				regressionProblem.newSampleData(olsProblem_y, olsProblem_x);
+				
+				double[] predictedValuesOLS = regressionProblem.estimateResiduals();
+				for (double v : predictedValuesOLS) {
+					System.out.println("The predicted values after OLS: " + v);
+				}
 				
 			}
-			
+
 			for (SlicedTile slicedTile : slicedTiles) {
-				long acquisitionDate = Long.parseLong(slicedTile.getAqcuisitionDate(), 20);
+				long acquisitionDate = Long.parseLong(slicedTile.getAqcuisitionDate(), 10);
 				for (int row = 0; row < slicedTileHeight; row++) {
 					for (int col = 0; col < slicedTileWidth; col++) {
 						short [] S16Tile = slicedTile.getSlicedTileS16Tile();
