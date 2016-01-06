@@ -21,6 +21,7 @@ from collections import defaultdict
 from struct import pack
 import random
 from numpy import abs, ones
+from math import floor
 import scipy
 import matplotlib.pyplot as plt
 from sklearn import svm
@@ -124,54 +125,57 @@ class AcqDateSelector(KeySelectorFunction):
         return value._aquisitionDate
 
 class SliceDetailedBlocks(FlatMapFunction):
-    #slicedTileWidth, slicedTileHeight, originalTileWidht, originalTileHeight
-    
-    def __init__(self,slicedTileWidth, slicedTileHeight):
+    def __init__(self,slicedTileWidth = 0, slicedTileHeight = 0):
         super(SliceDetailedBlocks, self).__init__()
         self.slicedTileWidth = slicedTileWidth
         self.slicedTileHeight = slicedTileHeight
-        
-    def flatMap(self, iterator, collector):
         print("The flatmap starts")
-        self.originalTileHeight = value.getTileHeight()
-        self.originalTileWidth = value.getTileWidth()
-        slicedTilesPerRow = self.originalTileWidth / self.slicedTileWidth
-        slicedTilesPerCol = self.originalTileHeight / self.slicedTileHeight
+        
+    def flat_map(self, value, collector):
+        originalTileHeight = value._height
+        originalTileWidth = value._width
+        slicedTilesPerRow = originalTileWidth / self.slicedTileWidth
+        slicedTilesPerCol = originalTileHeight / self.slicedTileHeight
         originalTileS16Tile = value._content
         
+        #print("The type of originalS16: " + type(originalTileS16Tile).__name__)
         
         for row in range (0, slicedTilesPerRow):
             for col in range (0, slicedTilesPerCol):
-                slicedTileLeftUpperCoordLon = Math.floor((value._leftUpperLon - value._rightLowerLon) / slicedTilesPerCol * row)
-                slicedTileLeftUpperCoordLat = Math.floor((value._leftUpperLat - value._rightLowerLat) / slicedTilesPerRow * col)
+                slicedTileLeftUpperCoordLon = floor(value._leftUpperLon - value._rightLowerLon) / slicedTilesPerCol * row
+                slicedTileLeftUpperCoordLat = floor(value._leftUpperLat - value._rightLowerLat) / slicedTilesPerRow * col
                 
-                slicedTileRightLowerCoordLon = Math.floor((value._leftUpperLon - value._rightLowerLon) / slicedTilesPerCol * (row + 1))
-                slicedTileRightLowerCoordLat = Math.floor((value._leftUpperLat - value._rightLowerLat) / slicedTilesPerRow * (col + 1))
+                slicedTileRightLowerCoordLon = floor((value._leftUpperLon - value._rightLowerLon) / slicedTilesPerCol * (row + 1))
+                slicedTileRightLowerCoordLat = floor((value._leftUpperLat - value._rightLowerLat) / slicedTilesPerRow * (col + 1))
                 
-        
                 band = value._band
-                acquisitionDate = value._acquisitionDate
-                slicedTileS16Tile
+                #Typo because of legacy issues
+                aquisitionDate = value._aquisitionDate
+                slicedTileS16Tile = bytearray()
                 
                 for slicedTileRow in range (0, self.slicedTileHeight):
-                    tempSlicedTileS16Tile = originalTileS16Tile[col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow:col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow + slicedTileWidth]
-                    slicedTileS16Tile.append(tempSlicedTileS16Tile) 
+                    tempSlicedTileS16Tile = originalTileS16Tile[col*self.slicedTileWidth + slicedTileRow*self.slicedTileWidth*slicedTilesPerRow + row*self.slicedTileWidth*self.slicedTileHeight*slicedTilesPerRow:
+                                                                col*self.slicedTileWidth + slicedTileRow*self.slicedTileWidth*slicedTilesPerRow + row*self.slicedTileWidth*self.slicedTileHeight*slicedTilesPerRow + self.slicedTileWidth]
+                    slicedTileS16Tile.extend(tempSlicedTileS16Tile)
+                    
+                #print("The type of newS16: " + type(slicedTileS16Tile).__name__)
                 
                 slicedTile = SlicedTile()
                 slicedTile._content = slicedTileS16Tile
+                #slicedTile._content = originalTileS16Tile
                 slicedTile._leftUpperLat = slicedTileLeftUpperCoordLat
                 slicedTile._leftUpperLon = slicedTileLeftUpperCoordLon
                 slicedTile._rightLowerLat = slicedTileRightLowerCoordLat
                 slicedTile._rightLowerLon = slicedTileRightLowerCoordLon
-                slicedTile._xPixelWidth = self.slicedTileWidth
-                slicedTile._yPixelWidth = self.slicedTileHeight
+                slicedTile._width = self.slicedTileWidth
+                slicedTile._height = self.slicedTileHeight
                 slicedTile._band = band
-                slicedTile._acquisitionDate = acquisitionDate
+                slicedTile._aquisitionDate = aquisitionDate
                 slicedTile._positionInTile = (row, col)
                 
                 collector.collect(slicedTile)
                 
-        self.allDatesList.append(value._aquisitionDate)
+        #self.allDatesList.append(value._aquisitionDate)
         print("The flatmap is over")
         
 class ApproxInvalidValues(GroupReduceFunction):
@@ -268,16 +272,17 @@ if __name__ == "__main__":
     rightLower = (float(leftLat) - int(blockSize) * int(pixelSize),
                   float(leftLong) + int(blockSize) * int(pixelSize))
     
-    output_file = "file:///Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/out/2.txt"
+    output_file = "file:///Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/out/pythonCuttingWithSlicedS16.txt"
 
     data = env.read_envi(path, leftLong, leftLat, blockSize, pixelSize)
     pixelTimeSeries = data.group_by(AcqDateSelector(), STRING)\
         .reduce_group(CubeCreator(leftUpper, rightLower, int(blockSize), int(blockSize)), TILE)\
-        .flat_map(SliceDetailedBlocks(detailedBlockSize, detailedBlockSize), SLICEDTILE)\
-        .group_by(AcqDateSelector(), STRING)\
-        .sort_group(AcqDateSelector(), Order.ASCENDING)\
-        .reduce_group(ApproxInvalidValues(detailedBlockSize, detailedBlockSize), SLICEDTILE)\
+        .flat_map(SliceDetailedBlocks(int(detailedBlockSize), int(detailedBlockSize)), SLICEDTILE)\
         .write_text(output_file, write_mode=WriteMode.OVERWRITE)
+        #.group_by(AcqDateSelector(), STRING)\
+        #.sort_group(AcqDateSelector(), Order.ASCENDING)\
+        #.reduce_group(ApproxInvalidValues(detailedBlockSize, detailedBlockSize), SLICEDTILE)\
+        #.write_text(output_file, write_mode=WriteMode.OVERWRITE)
         #.group_by(AcqDateSelector(), STRING)\
         #.sort_group(AcqDateSelector(), STRING)\
         
@@ -285,7 +290,7 @@ if __name__ == "__main__":
         #.sort_group(AcqDateSelector(), STRING)\
         #.reduce_group(ApproxInvalidValues(detailedBlockSize, detailedBlockSize), SLICEDTILE)\
         
-    print("dop: ", dop)
+    print("detailedBlockSize: ", detailedBlockSize)
     env.set_degree_of_parallelism(dop)
 
     env.execute(local=True)

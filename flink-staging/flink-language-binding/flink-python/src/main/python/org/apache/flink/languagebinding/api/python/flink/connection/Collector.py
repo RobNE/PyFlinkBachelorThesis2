@@ -144,9 +144,7 @@ class SlicedTileSerializer(object):
         bits.append(self._doubleSerializer.serialize(value._rightLowerLat))
         bits.append(self._longSerializer.serialize(value._height))
         bits.append(self._longSerializer.serialize(value._width))
-        if not (value._content is None):
-            print("This is the value: " + str(value._content))
-            bits.append(self._bytesSerializer.serialize(value._content))
+        bits.append(self._bytesSerializer.serialize(value._content))
         bits.append(self._longSerializer.serialize(value._positionInTile[0]))
         bits.append(self._longSerializer.serialize(value._positionInTile[1]))
         return b"".join(bits)

@@ -98,7 +98,7 @@ class Tile(object):
     Represents an envi tile (a blocked sub matrix of a scene in bsq)
     """
     def __init__(self):
-        self._aquisitionDate = ""
+        self._aquisitionDate = "No date given at all"
         self._pathRow = ""
         self._leftUpperLat = 0.0
         self._leftUpperLon = 0.0
@@ -152,7 +152,7 @@ class Tile(object):
 class SlicedTile(object):
     
     def __init__(self):
-        self._aquisitionDate = ""
+        self._aquisitionDate = "No date given"
         self._leftUpperLat = 0.0
         self._leftUpperLon = 0.0
         self._rightLowerLat = 0.0

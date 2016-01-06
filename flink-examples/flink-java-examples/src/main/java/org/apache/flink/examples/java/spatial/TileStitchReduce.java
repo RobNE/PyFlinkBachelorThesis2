@@ -69,12 +69,12 @@ public class TileStitchReduce implements GroupReduceFunction<Tile, Tile> {
 			boolean updated = false;
 			Tile result = new Tile();
 			short[] content = new short[xSize * ySize];
-			result.setS16Tile(content);
+			
 			// initialize with no data values
 			for (int i = 0; i < content.length; i++) {
 				content[i] = -9999; // TODO: get this from tile info
 			}
-			
+			result.setS16Tile(content);
 
 			Set<Tile> inputTiles = bandToTiles.get(band);
 			for (Tile t : inputTiles) {
@@ -92,7 +92,10 @@ public class TileStitchReduce implements GroupReduceFunction<Tile, Tile> {
 				for (int i = 0; i < t.getS16Tile().length; i++) {
 					Coordinate pixelCoord = t.getCoordinate(i);
 					if(t.getS16Tile()[i] != -9999) {
+						//System.out.println("The S16 value which != -9999: " + t.getS16Tile()[i]);
 						origNotNullCounter++;
+					} else {
+						System.out.println("The S16 val is -9999");
 					}
 					
 					if(
@@ -104,7 +107,7 @@ public class TileStitchReduce implements GroupReduceFunction<Tile, Tile> {
 						) {
 						int index = result
 								.getContentIndexFromCoordinate(pixelCoord);
-						if (index >= 0 && index < content.length) {
+						if (index >= 0 && index < result.getS16Tile().length) {
 							insideCounter++;
 							short pixelValue = t.getS16Tile()[i];
 							if(pixelValue != -9999) {

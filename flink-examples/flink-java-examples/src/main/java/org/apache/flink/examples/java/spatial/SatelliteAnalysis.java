@@ -34,7 +34,7 @@ import org.apache.commons.lang.ArrayUtils;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
 //import org.apache.flink.api.common.functions.ReduceFunction;
-import org.apache.flink.api.common.operators.Order;
+//import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.functions.KeySelector;
@@ -87,7 +87,7 @@ public class SatelliteAnalysis {
 		//for every group are approximated and inserted in the group.
 		//TODO: Add a groupReduce to approx future values.
 		DataSet<SlicedTile> slicedTiles = stitchedTimeSlices.flatMap(new SliceDetailedBlocks(detailedBlockSize, detailedBlockSize));
-		DataSet<SlicedTile> slicedTilesSortedAndApproximated = slicedTiles
+		/*DataSet<SlicedTile> slicedTilesSortedAndApproximated = slicedTiles
 				//Group the slicedTiles by their position and the respective band
 				.groupBy(new KeySelector<SlicedTile, Tuple2<Tuple2<Integer, Integer>, Integer>>() {
 					private static final long serialVersionUID = 5L;
@@ -103,9 +103,9 @@ public class SatelliteAnalysis {
 				.sortGroup(new SlicedTileTimeKeySelector<SlicedTile>(), Order.ASCENDING)
 				//Until here everything seems to be valid. See /Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/out/1.txt
 				.reduceGroup(new ApproxInvalidValues(detailedBlockSize, detailedBlockSize));
-		
+		*/
 				
-		slicedTilesSortedAndApproximated.writeAsText(outputFilePath, WriteMode.OVERWRITE).setParallelism(1);
+		slicedTiles.writeAsText(outputFilePath, WriteMode.OVERWRITE).setParallelism(1);
 			
 		env.execute("Data Cube Creation");
 	}
@@ -179,7 +179,8 @@ public class SatelliteAnalysis {
 					SlicedTile slicedTile = new SlicedTile(
 							slicedTileLeftUpperCoord,
 							slicedTileRightLowerCoord,
-							slicedTileS16Tile,
+							//slicedTileS16Tile,
+							originalTileS16Tile,
 							slicedTileWidth,
 							slicedTileHeight
 							);
