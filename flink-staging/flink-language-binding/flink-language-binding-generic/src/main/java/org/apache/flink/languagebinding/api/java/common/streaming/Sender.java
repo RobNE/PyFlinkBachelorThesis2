@@ -662,6 +662,7 @@ public class Sender implements Serializable {
 
 
 			if (value.getAqcuisitionDate() != null) {
+				System.out.println("The aqu date in the sender: " + value.getAqcuisitionDate());
 				this.boolSerializer.buffer.clear();
 				this.boolSerializer.serializeInternal(true);
 				length += this.boolSerializer.buffer.position();
@@ -715,16 +716,6 @@ public class Sender implements Serializable {
 			length += this.intSerializer3.buffer.position();
 			this.buffers.add(this.intSerializer3.buffer);
 			
-			this.intSerializer4.buffer.clear();
-			this.intSerializer4.serializeInternal(value.getPositionInTile().f0);
-			length += this.intSerializer4.buffer.position();
-			this.buffers.add(this.intSerializer4.buffer);
-			
-			this.intSerializer5.buffer.clear();
-			this.intSerializer5.serializeInternal(value.getPositionInTile().f1);
-			length += this.intSerializer5.buffer.position();
-			this.buffers.add(this.intSerializer5.buffer);
-			
 			if(value.getSlicedTileS16Tile() != null && value.getSlicedTileS16Tile().length > 0) {
 				this.boolSerializer.buffer.clear();
 				this.boolSerializer.serializeInternal(true);
@@ -745,6 +736,16 @@ public class Sender implements Serializable {
 				length += this.boolSerializer.buffer.position();
 				this.buffers.add(this.boolSerializer.buffer);
 			}
+
+			this.intSerializer4.buffer.clear();
+			this.intSerializer4.serializeInternal(value.getPositionInTile().f0);
+			length += this.intSerializer4.buffer.position();
+			this.buffers.add(this.intSerializer4.buffer);
+
+			this.intSerializer5.buffer.clear();
+			this.intSerializer5.serializeInternal(value.getPositionInTile().f1);
+			length += this.intSerializer5.buffer.position();
+			this.buffers.add(this.intSerializer5.buffer);
 
 			buffer = ByteBuffer.allocate(length);
 			for (ByteBuffer b : buffers) {

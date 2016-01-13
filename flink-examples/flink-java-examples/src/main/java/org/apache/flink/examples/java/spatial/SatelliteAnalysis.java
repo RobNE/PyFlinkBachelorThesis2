@@ -17,6 +17,8 @@
  */
 package org.apache.flink.examples.java.spatial;
 
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -30,15 +32,12 @@ import libsvm.svm_problem;
 import libsvm.svm;
 
 import org.apache.commons.lang.ArrayUtils;
-//import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
-//import org.apache.flink.api.common.functions.ReduceFunction;
-//import org.apache.flink.api.common.operators.Order;
+import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.functions.KeySelector;
-//import org.apache.flink.api.java.operators.DataSink;
 import org.apache.flink.api.java.operators.DataSource;
 import org.apache.flink.api.java.spatial.Coordinate;
 import org.apache.flink.api.java.spatial.SlicedTile;
@@ -47,9 +46,9 @@ import org.apache.flink.api.java.spatial.TileTimeKeySelector;
 import org.apache.flink.api.java.spatial.TileTypeInformation;
 import org.apache.flink.api.java.spatial.envi.TileInputFormat;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple6;
 import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.core.fs.Path;
-//import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.util.Collector;
 import org.apache.commons.math.stat.regression.OLSMultipleLinearRegression;
 
@@ -63,9 +62,18 @@ public class SatelliteAnalysis {
 	private static int pixelSize;
 	private static int detailedBlockSize; //squared blocks for the beginning
 	private static HashSet<Long> allDates = new HashSet<Long>(128);
+	private static PrintStream dummyStream;
 
 	public static void main(String[] args) throws Exception {
-		
+		dummyStream    = new PrintStream(new OutputStream(){
+			public void write(int b) {
+				//NO-OP
+			}
+		});
+
+		//System.setErr(dummyStream);
+		//System.setOut(dummyStream);
+
 		//Check if all parameters are present
 		if (!parseParameters(args)) {
 			return;
@@ -85,9 +93,8 @@ public class SatelliteAnalysis {
 				
 		//Slices all Tiles in smaller SlicedTiles. Then groups them by their position and sorts them by acquisitionDate. Afterwards the missing/invalid values 
 		//for every group are approximated and inserted in the group.
-		//TODO: Add a groupReduce to approx future values.
 		DataSet<SlicedTile> slicedTiles = stitchedTimeSlices.flatMap(new SliceDetailedBlocks(detailedBlockSize, detailedBlockSize));
-		/*DataSet<SlicedTile> slicedTilesSortedAndApproximated = slicedTiles
+		DataSet<Tuple6<Integer, Integer, Integer, Double, Double, Double>> slicedTilesSortedAndApproximated = slicedTiles
 				//Group the slicedTiles by their position and the respective band
 				.groupBy(new KeySelector<SlicedTile, Tuple2<Tuple2<Integer, Integer>, Integer>>() {
 					private static final long serialVersionUID = 5L;
@@ -96,17 +103,16 @@ public class SatelliteAnalysis {
 					public Tuple2<Tuple2<Integer, Integer>, Integer> getKey(SlicedTile s) {
 						groupingKey.setField(s.getPositionInTile(), 0);
 						groupingKey.setField(s.getBand(), 1);
-						return groupingKey; 
+						return groupingKey;
 					}
 				})
                 //Sort every group of SlicedTiles by their acqTime	
 				.sortGroup(new SlicedTileTimeKeySelector<SlicedTile>(), Order.ASCENDING)
 				//Until here everything seems to be valid. See /Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/out/1.txt
 				.reduceGroup(new ApproxInvalidValues(detailedBlockSize, detailedBlockSize));
-		*/
-				
-		slicedTiles.writeAsText(outputFilePath, WriteMode.OVERWRITE).setParallelism(1);
-			
+
+		slicedTilesSortedAndApproximated.writeAsText(outputFilePath, WriteMode.OVERWRITE).setParallelism(1);
+
 		env.execute("Data Cube Creation");
 	}
 	
@@ -131,7 +137,7 @@ public class SatelliteAnalysis {
 			//System.out.println(this.originalTileHeight + " + " + this.originalTileWidth);
 			
 			int slicedTilesPerRow = originalTileWidth / slicedTileWidth;
-			int slicedTilesPerCol = originalTileHeight / slicedTileHeight; //As long as the blocks are squared!
+			int slicedTilesPerCol = originalTileHeight / slicedTileHeight;
 			short[] originalTileS16Tile = value.getS16Tile();
 			
 			for (int row = 0; row < slicedTilesPerRow; row++) {
@@ -159,18 +165,18 @@ public class SatelliteAnalysis {
 									col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow, 
 									col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow + slicedTileWidth);
 						} catch (Exception e) {
-							System.out.println("The row:" + row);
-							System.out.println("The col:" + col);
-							System.out.println("The slicedTileRow:" + slicedTileRow);
-							System.out.println("The slicedTilesPerRow:" + slicedTilesPerRow);
-							System.out.println("The slicedTilesPerCol:" + slicedTilesPerCol);
+							//System.out.println("The row:" + row);
+							//System.out.println("The col:" + col);
+							//System.out.println("The slicedTileRow:" + slicedTileRow);
+							//System.out.println("The slicedTilesPerRow:" + slicedTilesPerRow);
+							//System.out.println("The slicedTilesPerCol:" + slicedTilesPerCol);
 							
 							
-							System.out.println("This is the error" + e.toString());
-							System.out.println("The original length: " + originalTileS16Tile.length);
+							//System.out.println("This is the error" + e.toString());
+							//System.out.println("The original length: " + originalTileS16Tile.length);
 							
-							System.out.println("The interval beginning: " + col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow);
-							System.out.println("The interval end: " + col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow + slicedTileWidth);
+							//System.out.println("The interval beginning: " + col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow);
+							//System.out.println("The interval end: " + col*slicedTileWidth + slicedTileRow*slicedTileWidth*slicedTilesPerRow + row*slicedTileWidth*slicedTileHeight*slicedTilesPerRow + slicedTileWidth);
 						}
 						slicedTileS16Tile = ArrayUtils.addAll(slicedTileS16Tile, tempSlicedTileS16Tile);
 					}
@@ -220,17 +226,19 @@ public class SatelliteAnalysis {
 	 * Every instance of the groupReduce has access to every SlicedTile in a group.
 	 */
 	
-	public static final class ApproxInvalidValues implements GroupReduceFunction<SlicedTile, SlicedTile> {
-		//TODO: Import svr+ols libs, use them. Until here it is finished.
-		
+	public static final class ApproxInvalidValues implements GroupReduceFunction<SlicedTile, Tuple6<Integer, Integer, Integer, Double, Double, Double>> {
 		private static final long serialVersionUID = 4L;
 		private int slicedTileWidth;
 		private int slicedTileHeight;
 
 		@Override
-		public void reduce(Iterable<SlicedTile> values, Collector<SlicedTile> out) throws Exception {
+		public void reduce(Iterable<SlicedTile> values, Collector<Tuple6<Integer, Integer, Integer, Double, Double, Double>> out) throws Exception {
 			//Create a HashMap for every pixel of the slicedTile. The HashMaps consist of the corresponding pixelTimeSeries
-			System.out.println("The detailedBlockSize: " + slicedTileWidth + " " + slicedTileHeight);
+			//System.out.println("The detailedBlockSize: " + slicedTileWidth + " " + slicedTileHeight);
+			System.out.println("The reduce is executed");
+			Integer band = -1;
+			Integer slicedTileXPos = -1;
+			Integer slicedTileYPos = -1;
 			HashMap<Tuple2<Integer, Integer>, HashMap<Long, Short>> allPixelTimeSeries = new HashMap<Tuple2<Integer, Integer>, HashMap<Long, Short>>(slicedTileWidth*slicedTileHeight);
 			
 			//Init the array with empty pixelTimeSeries for every pixel
@@ -244,6 +252,16 @@ public class SatelliteAnalysis {
 			ArrayList<SlicedTile> slicedTiles = new ArrayList<SlicedTile>();
 			//Insert the values into the pixelTimeSeries
 			for (SlicedTile slicedTile : values) {
+				if (band == -1) {
+					band = slicedTile.getBand();
+				}if (slicedTileXPos == -1) {
+					slicedTileXPos = slicedTile.getPositionInTile().f0;
+				}if (slicedTileYPos == -1) {
+					slicedTileYPos = slicedTile.getPositionInTile().f1;
+				}
+				if (band != slicedTile.getBand()) {
+					System.out.println("The band should be " + band + " but is: " + slicedTile.getBand());
+				}
 				long acquisitionDate = Long.parseLong(slicedTile.getAqcuisitionDate(), 10);
 				for (int row = 0; row < slicedTileHeight; row++) {
 					for (int col = 0; col < slicedTileWidth; col++) {
@@ -254,20 +272,20 @@ public class SatelliteAnalysis {
 							Tuple2<Integer, Integer> position = new Tuple2<Integer, Integer>(col, row);
 							allPixelTimeSeries.get(position).put(acquisitionDate, pixelVegetationIndex);
 						} catch(Exception e) {
-							System.out.println("The slicedTile x: " + slicedTileWidth + " and the y: " + slicedTileHeight);
-							System.out.println("The row: " + row + " and the col: " + col + " when the array fails at the position: " + (row + col));
+							//System.out.println("The slicedTile x: " + slicedTileWidth + " and the y: " + slicedTileHeight);
+							//System.out.println("The row: " + row + " and the col: " + col + " when the array fails at the position: " + (row + col));
 						}
 					}
 				}
 				slicedTiles.add(slicedTile);
 			}
 						
-			System.out.println("The allPixelTimeSeries size: " + allPixelTimeSeries.size() + ". Should be equivalent to slicedTileHeight*slicedTileWidth = " + slicedTileHeight*slicedTileWidth);
+			//System.out.println("The allPixelTimeSeries size: " + allPixelTimeSeries.size() + ". Should be equivalent to slicedTileHeight*slicedTileWidth = " + slicedTileHeight*slicedTileWidth);
 			
 			//Add the key values (the positions) to a list to make them easily accessible for the LIBSVM construction
 			List<Tuple2<Integer, Integer>> allPixelTimeSeriesList = new ArrayList<Tuple2<Integer, Integer>>(allPixelTimeSeries.keySet());
 			//Check the size:
-			System.out.println("The size of the allPixelTimeSeriesList (should be row*col): " + allPixelTimeSeriesList.size());
+			//System.out.println("The size of the allPixelTimeSeriesList (should be row*col): " + allPixelTimeSeriesList.size());
 			
 			//Construct a LIVBSVM problem for every timePixelSeries (= for every position)
 			for (Tuple2<Integer, Integer> position : allPixelTimeSeriesList) {
@@ -276,13 +294,21 @@ public class SatelliteAnalysis {
 				double[] train_x = new double[trainingSetSize];
 				svm_node[] predict_x = new svm_node[trainingSetList.size()];
 				double[] train_y = new double[trainingSetSize];
+				double maxValue = -9999;
 				
-				System.out.println("The trainingList: " + trainingSetList);
+				//System.out.println("The trainingList: " + trainingSetList);
 				
 				for (int i=0; i < trainingSetList.size(); i++) {
 					Long aqcisitionDate = trainingSetList.get(i);
 					train_x [i] = aqcisitionDate.doubleValue();
 					train_y [i] = allPixelTimeSeries.get(position).get(aqcisitionDate);
+					if (train_y [i] > maxValue) {
+						maxValue = train_y[i];
+					}
+				}
+
+				for (int i=0; i < train_y.length; i++) {
+					train_y[i] = train_y[i] / maxValue;
 				}
 				
 				//Build the SVM_Problem
@@ -291,7 +317,7 @@ public class SatelliteAnalysis {
 				prob.y = new double[countOfDates];
 				prob.l = countOfDates;
 				prob.x = new svm_node[countOfDates][];
-				System.out.println("The count of dates: " + countOfDates);
+				//System.out.println("The count of dates: " + countOfDates);
 				
 				for (int i = 0; i < countOfDates; i++){
 					double value = train_y[i];
@@ -306,15 +332,16 @@ public class SatelliteAnalysis {
 
 				svm_parameter param = new svm_parameter();
 				param.C = 1;
-				param.eps = 0.1;
+				param.eps = 0.001;
 				param.svm_type = svm_parameter.EPSILON_SVR;
-				param.kernel_type = svm_parameter.LINEAR;	
+				param.kernel_type = svm_parameter.RBF;
 				param.probability = 1;
 	
 				svm_model model = svm.svm_train(prob, param);
-				
+
+				double svrProbability = svm.svm_get_svr_probability(model);
 				double predictedValuesSVR = svm.svm_predict(model, predict_x);
-				
+				System.out.println("The svr prob: " + svm.svm_get_svr_probability(model));
 				System.out.println("The predicted values after SVR: " + predictedValuesSVR);
 				
 				double[][] olsProblem_x = new double[countOfDates][];
@@ -327,8 +354,8 @@ public class SatelliteAnalysis {
 					olsProblem_y[i] = value;
 				}
 				
-				System.out.println("X-length: " + olsProblem_x.length);
-				System.out.println("Y-length: " + olsProblem_y.length);
+				//System.out.println("X-length: " + olsProblem_x.length);
+				//System.out.println("Y-length: " + olsProblem_y.length);
 				
 				OLSMultipleLinearRegression regressionProblem = new OLSMultipleLinearRegression();
 				//regressionProblem.newSampleData(olsProblem_y, olsProblem_x);
@@ -336,30 +363,29 @@ public class SatelliteAnalysis {
 				regressionProblem.newSampleData(olsProblem_y, olsProblem_x);
 				
 				double[] predictedValuesOLS = regressionProblem.estimateResiduals();
-				for (double v : predictedValuesOLS) {
-					System.out.println("The predicted values after OLS: " + v);
-				}
-				
-			}
+				double regressandVariance = regressionProblem.estimateRegressandVariance();
+				//for (double v : predictedValuesOLS) {
+					//System.out.println("The predicted values after OLS: " + v);
+				//}
+				Tuple6<Integer, Integer, Integer, Double, Double, Double> pixelTimeSeriesInformation = new Tuple6<Integer, Integer, Integer, Double, Double, Double>();
+				//Pixel x coord
+				int xPixelValue = this.slicedTileWidth * slicedTileXPos + position.f0;
+				pixelTimeSeriesInformation.f0 = xPixelValue;
+				//Pixel y coord
+				int yPixelValue = this.slicedTileHeight * slicedTileYPos + position.f1;
+				pixelTimeSeriesInformation.f1 = yPixelValue;
+				//Pixel band
+				pixelTimeSeriesInformation.f2 = band;
+				//SVR Probability
+				pixelTimeSeriesInformation.f3 = svrProbability;
+				//SVR predictedValues
+				pixelTimeSeriesInformation.f4 = predictedValuesSVR;
+				//OLS regressandVariance
+				pixelTimeSeriesInformation.f5 = regressandVariance;
 
-			for (SlicedTile slicedTile : slicedTiles) {
-				long acquisitionDate = Long.parseLong(slicedTile.getAqcuisitionDate(), 10);
-				for (int row = 0; row < slicedTileHeight; row++) {
-					for (int col = 0; col < slicedTileWidth; col++) {
-						short [] S16Tile = slicedTile.getSlicedTileS16Tile();
-						//Set the pixel value for the pixel at position row/col
-						try {
-							Tuple2<Integer, Integer> position = new Tuple2<Integer, Integer>(col, row);
-							short pixelVegetationIndex = allPixelTimeSeries.get(position).get(acquisitionDate);
-							S16Tile[row*slicedTileWidth + col] = pixelVegetationIndex;
-							slicedTile.setSlicedTileS16Tile(S16Tile);
-						} catch(Exception e) {
-							System.out.println("The slicedTile x: " + slicedTileWidth + " and the y: " + slicedTileHeight);
-							System.out.println("The row: " + row + " and the col: " + col + " when the array fails at the position: " + (row + col));
-						}
-					}
-				}
-				out.collect(slicedTile);
+				System.out.println("The resulting Tuple6: " + pixelTimeSeriesInformation);
+
+				out.collect(pixelTimeSeriesInformation);
 			}
 		}
 		

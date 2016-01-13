@@ -17,29 +17,76 @@
  */
 package org.apache.flink.examples.java.spatial;
 
+import org.apache.commons.math.linear.RealMatrix;
 import org.apache.commons.math.stat.regression.OLSMultipleLinearRegression;
-
-
 
 public class OLSTest {
 	public static void main(String[] args) {
-		double[][] x_values = {{1.0}, {5.0}, {7.0}, {12.0}, {14.0}, {20.0} ,{21.0}};
-		double[] y_values = {4., 7., 10., 8., 6., 2., 5.};
+		double[][] x_values = {{0.0}, {1.0}, {2.0}, {3.0}};
+		double[] y_values = {1., 2., 4., 9.};
+
+		double max = y_values[0];
+		for (int i = 1; i < y_values.length; i++) {
+			if (y_values[i] > max) {
+				max = y_values[i];
+			}
+		}
+
+		double[] y_values_normalized = new double[y_values.length];
+		for (int i = 0; i < y_values.length; i++) {
+			y_values_normalized[i] = y_values[i] / max;
+		}
 		
 		OLSMultipleLinearRegression regressionProblem = new OLSMultipleLinearRegression();
 		//regressionProblem.newSampleData(y_values, 7, 0);
-		regressionProblem.newSampleData(y_values, x_values);
+		regressionProblem.newSampleData(y_values_normalized, x_values);
 		
 		double[] predictedValuesOLS = regressionProblem.estimateResiduals();
+
+		/*
+		for (int i=0; i < predictedValuesOLS.length; i++) {
+			predictedValuesOLS[i] = predictedValuesOLS[i] * max;
+		}*/
 		
 		double[] predictedRegressionParams = regressionProblem.estimateRegressionParameters();
+		double[] estimatedRegressionParametersStandardErrors = regressionProblem.estimateRegressionParametersStandardErrors();
+		RealMatrix hat = regressionProblem.calculateHat();
+
+		System.out.print("The original values normalized: ");
+		for (double v : y_values_normalized) {
+			System.out.print(", " + v);
+		}
+
+		System.out.println();
+
+		System.out.print("The predicted values after OLS: ");
 		for (double v : predictedValuesOLS) {
-			System.out.println("The predicted values after OLS: " + v);
+			System.out.print(", " + v);
 		}
-		
-		
+
+		System.out.println();
+
+		System.out.print("The predicted regressionParams after OLS: ");
 		for (double v : predictedRegressionParams) {
-			System.out.println("The predicted regressionParams after OLS: " + v);
+			System.out.print(", " + v);
 		}
+
+		System.out.println();
+
+		System.out.print("The predicted estimatedRegressionParametersStandardErrors after OLS: ");
+		for (double v : estimatedRegressionParametersStandardErrors) {
+			System.out.print(", " + v);
+		}
+
+		System.out.println();
+
+		for (int i = 0; i < hat.getRowDimension(); i++) {
+			double [] row = hat.getRow(i);
+			System.out.println();
+			for (double v : row) {
+				System.out.print(v + ", ");
+			}
+		}
+
 	}
 }

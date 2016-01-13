@@ -95,7 +95,7 @@ public class TileStitchReduce implements GroupReduceFunction<Tile, Tile> {
 						//System.out.println("The S16 value which != -9999: " + t.getS16Tile()[i]);
 						origNotNullCounter++;
 					} else {
-						System.out.println("The S16 val is -9999");
+						//System.out.println("The S16 val is -9999");
 					}
 					
 					if(
@@ -125,7 +125,7 @@ public class TileStitchReduce implements GroupReduceFunction<Tile, Tile> {
 			out.collect(result);
 
 		}
-		System.out.println("Counted " + insideCounter + " and " + knownCounter + " originally not null: " + origNotNullCounter);
+		//System.out.println("Counted " + insideCounter + " and " + knownCounter + " originally not null: " + origNotNullCounter);
 	}
 
 	public TileStitchReduce configure(Coordinate leftUpper,

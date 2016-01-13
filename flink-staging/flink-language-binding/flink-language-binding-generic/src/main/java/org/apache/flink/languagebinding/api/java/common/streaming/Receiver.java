@@ -436,6 +436,7 @@ public class Receiver implements Serializable {
 		@Override
 		public SlicedTile deserialize() {
 			this.reuse.setAqcuisitionDate(this.stringDes.deserialize());
+			System.out.println("The aqu date in the receiver: " + this.reuse.getAqcuisitionDate());
 			this.reuse.setBand(this.intDes.deserialize().intValue());
 
 			double luLon = this.doubleDes.deserialize();

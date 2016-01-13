@@ -174,7 +174,7 @@ class SlicedTile(object):
         self._width = width
         self._height = height
         self._band = band
-        self._acquisitionDate = acquisitionDate
+        self._aquisitionDate = acquisitionDate
         self._positionInTile = positionInTile
 
 class Cube(object):

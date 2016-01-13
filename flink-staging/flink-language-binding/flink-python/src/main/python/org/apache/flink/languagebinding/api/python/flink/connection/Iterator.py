@@ -245,6 +245,8 @@ def _get_deserializer(group, read, type=None):
         return NullDeserializer(read, group)
     elif type == Types.TYPE_TILE:
         return TileDeserializer(read, group)
+    elif type == Types.TYPE_SLICEDTILE:
+        return SlicedTileDeserializer(read, group)
 
 class TupleDeserializer(object):
     def __init__(self, read, group):
@@ -328,7 +330,11 @@ class StringDeserializer(object):
 
     def deserialize(self):
         length = unpack(">i", self.read(4, self._group))[0]
-        return self.read(length, self._group).decode("utf-8") if length else ""
+        print ("Lenght of the string: " + str(length))
+        raw = self.read(length, self._group)
+        #print (raw)
+        print (raw.decode("utf-8"))
+        return raw.decode("utf-8") if length else ""
 
 
 class NullDeserializer(object):
@@ -387,13 +393,13 @@ class SlicedTileDeserializer(object):
         self._intSerializer = IntegerDeserializer(read, group)
         self._doubleSerializer = DoubleDeserializer(read, group)
         self._bytesSerializer = ByteArrayDeserializer(read, group)
-        self._tupleSerializer = TupleDeserializer(read, group)
 
     def deserialize(self):
         slicedTile = SlicedTile()
         isAckDate = self._boolSerializer.deserialize()
         if isAckDate > 0:
             slicedTile._aquisitionDate = self._stringSerializer.deserialize()
+            print ("The deserialized acqu date: " + str(slicedTile._aquisitionDate))
 
         slicedTile._band = self._intSerializer.deserialize()
 
