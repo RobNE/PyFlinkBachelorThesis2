@@ -136,7 +136,6 @@ class SlicedTileSerializer(object):
     def serialize(self, value):
         bits = []
         """TODO: remove check isNull checks from Tile Serialization for pathRow, ackDate and Content """
-        print ("The serialized acqu date: " + str(value._aquisitionDate))
         bits.append(self._stringSerializer.serialize(value._aquisitionDate))
         bits.append(self._longSerializer.serialize(value._band))
         bits.append(self._doubleSerializer.serialize(value._leftUpperLon))

@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 from sklearn import svm
 
 from flink.plan.Environment import get_environment
-from flink.plan.Constants import TILE, SLICEDTILE, INT, STRING, Tile, SlicedTile, WriteMode, Order
+from flink.plan.Constants import TILE, SLICEDTILE, INT, STRING, Tile, SlicedTile, WriteMode, ARRAY
 from flink.functions.FlatMapFunction import FlatMapFunction
 from flink.functions.GroupReduceFunction import GroupReduceFunction
 from flink.functions.KeySelectorFunction import KeySelectorFunction
@@ -161,8 +161,8 @@ class SliceDetailedBlocks(FlatMapFunction):
                     startIndex = col*self.slicedTileWidth + slicedTileRow*self.slicedTileWidth*slicedTilesPerRow + row*self.slicedTileWidth*self.slicedTileHeight*slicedTilesPerRow
                     endIndex = col*self.slicedTileWidth + slicedTileRow*self.slicedTileWidth*slicedTilesPerRow + row*self.slicedTileWidth*self.slicedTileHeight*slicedTilesPerRow + self.slicedTileWidth
                     tempSlicedTileS16Tile = originalTileS16Tile[startIndex * 2: endIndex * 2]
-                    print ("Startindex and endIndex: ", startIndex,endIndex )
-                    print ("The tempSlicedTile: ",tempSlicedTileS16Tile)
+                    #print ("Startindex and endIndex: ", startIndex,endIndex )
+                    #print ("The tempSlicedTile: ",tempSlicedTileS16Tile)
                     slicedTileS16Tile.extend(tempSlicedTileS16Tile)
                     
                 #print("The type of newS16: " + type(slicedTileS16Tile).__name__)
@@ -180,7 +180,7 @@ class SliceDetailedBlocks(FlatMapFunction):
                 slicedTile._aquisitionDate = aquisitionDate
                 slicedTile._positionInTile = (row, col)
 
-                print ("The aqu Date: " + str(slicedTile._aquisitionDate))
+                #print ("The aqu Date: " + str(slicedTile._aquisitionDate))
                 
                 collector.collect(slicedTile)
                 
@@ -190,41 +190,48 @@ class SliceDetailedBlocks(FlatMapFunction):
 class ApproxInvalidValues(GroupReduceFunction):
     def reduce(self, iterator, collector):
         allPixelTimeSeries = {} #the dic containing all pixelTimeSeries
-        pixelTimeSeries = {} #a pixelTimeSeries
         slicedTiles = []
         allDatesList = set()
+        band = -1
+        slicedTileXPos = -1
+        slicedTileYPos = -1
         
         for row in xrange (0, self.slicedTileHeight):
             for col in range (0, self.slicedTileWidth):
+                pixelTimeSeries = {}
                 positionInTile = row, col
                 allPixelTimeSeries[positionInTile] = pixelTimeSeries
         
         for slicedTile in iterator:
+            if (band == -1):
+                band = slicedTile._band
+            if (slicedTileXPos == -1):
+                slicedTileXPos = slicedTile._positionInTile[0]
+            if (slicedTileYPos == -1):
+                slicedTileYPos = slicedTile._positionInTile[1]
             acquisitionDate = slicedTile._aquisitionDate
             allDatesList.add(acquisitionDate)
-            for row in range (0, self.slicedTileHeight):
-                for col in range (0, self.slicedTileWidth):
-                    S16Tile = slicedTile._content
-
-                    #TODO: Check whether the assignment of the arrays works as expected
+            S16Tile = slicedTile._content
+            for row in xrange (0, self.slicedTileHeight):
+                for col in xrange (0, self.slicedTileWidth):
                     index = (row*self.slicedTileWidth+col)*2
                     pixelVegetationIndexBytes = S16Tile[index: index+2]
                     pixelVegetationIndex = unpack("<h", pixelVegetationIndexBytes)[0]
-                    print ("The pxVegIndex after unpack: " + str(pixelVegetationIndex))
+                    #print ("The pxVegIndex after unpack: " + str(pixelVegetationIndex))
                     currentPixelTimeSeries = allPixelTimeSeries[(row, col)]
                     currentPixelTimeSeries[acquisitionDate] = pixelVegetationIndex
 
             slicedTiles.append(slicedTile)
 
-        print ("The count of slicedTileObjects: ") + str(len(slicedTiles))
-        trainingSetSize = len(allDatesList)
-        print ("The trainingSetSize: " + str(trainingSetSize))
+        #print ("The count of slicedTileObjects: ") + str(len(slicedTiles))
         
         for position in allPixelTimeSeries:
             train_x = []
             train_y = []
+            maxValue = -9999
             
             currentPixelTimeSeries = allPixelTimeSeries[position]
+            #get the acquDates
             currentPixelTimeSeriesKeys = currentPixelTimeSeries.keys()
             
             trainingSetList = currentPixelTimeSeriesKeys
@@ -233,53 +240,53 @@ class ApproxInvalidValues(GroupReduceFunction):
             for i in xrange (0, len(trainingSetList)):
                 acquisitionDate = trainingSetList[i]
                 pixelTimeSeriesValues = allPixelTimeSeries[position]
+                print ("The acquDate:",pixelTimeSeriesValues[acquisitionDate])
                 if (pixelTimeSeriesValues[acquisitionDate] > -9999 and pixelTimeSeriesValues[acquisitionDate] < 16000):
                     train_x.append(acquisitionDate)
                     train_y.append(pixelTimeSeriesValues[acquisitionDate])
+                    if (pixelTimeSeriesValues[acquisitionDate] > maxValue and pixelTimeSeriesValues[acquisitionDate] != 0):
+                        maxValue = pixelTimeSeriesValues[acquisitionDate]
 
-            print ("Train_y before fit: " + str(train_y))
-            print ("Train_x: before fit" + str(train_x))
-            
+            for i in xrange (0, len(train_y)):
+                train_y[i] = train_y[i]/maxValue
+
+            #print ("Train_y before fit: " + str(train_y))
+            #print ("Train_x: before fit" + str(train_x))
+            coefficientsAsString = None
             #Create the SVM Problem
             if ((len(train_x) > 1) and (len(train_y) > 1)):
                 try:
-                    svr = svm.SVR(gamma=1./(2.*(3/12.)**2), C=1, epsilon=0.1)
+                    svr = svm.SVR(C=1, epsilon=0.1)
                     svr.fit([[x] for x in train_x], train_y)
+                    coefficients = svr.dual_coef_
+                    print ("The coeffs:",coefficients)
+                    coefficientsAsString = str(coefficients).strip('[]')
+                    print ("The coeffs as string:",coefficientsAsString)
                     #svr.predict([[x] for x in train_x])
             
                     def f(x, m, n):
-                        print ("x" + str(x))
-                        print ("m" + str(m))
-                        print ("n" + str(n))
+                        #print ("x" + str(x))
+                        #print ("m" + str(m))
+                        #print ("n" + str(n))
                         return m*x+n
 
                     #print ("Train_y: " + str(train_y))
                     #print ("Train_x: " + str(train_x))
 
-                    fitpars, covmat = scipy.optimize.curve_fit(f, [int(x) for x in train_x], train_y)
-                    print('observed:', train_y)
-                    print('predicted:', str(f(train_x, *fitpars)))
+                    #fitpars, covmat = scipy.optimize.curve_fit(f, [int(x) for x in train_x], train_y)
+                    #print('observed:', train_y)
+                    #print('predicted:', str(f(train_x, *fitpars)))
                 except TypeError, e:
                     print ("The analysis failed due to TypeError e:", e)
 
             else:
                 print("The parameters were not sufficient to execute the analysis")
-            
-        for slicedTile in slicedTiles:
-            aquisitionDate = slicedTile._aquisitionDate
-            S16Tile = slicedTile._content
-            for row in xrange (0, self.slicedTileHeight):
-                for col in xrange (0, self.slicedTileWidth):
-                    position = row, col
-                    pixelVegetationIndex = allPixelTimeSeries.get(position).get(aquisitionDate)
-                    print ("The pxVegIndex as Number: " + str(pixelVegetationIndex))
-                    pixelVegetationIndexBytes = pack("<h", pixelVegetationIndex)
-                    print ("The pxVegIndex after packing as bytes: " + str(pixelVegetationIndexBytes))
-                    S16Tile[row*self.slicedTileWidth + col] = pixelVegetationIndexBytes[0]
-                    S16Tile[row*self.slicedTileWidth + col + 1] = pixelVegetationIndexBytes[1]
-                    #print ("The pxVegIndex after packing: " + str(S16Tile[row*self.slicedTileWidth + col: row*self.slicedTileWidth + col + 2]))
-            slicedTile._content = S16Tile
-            collector.collect(slicedTile)
+
+            xPixelValue = self.slicedTileWidth * slicedTileXPos + position[0]
+            yPixelValue = self.slicedTileHeight * slicedTileYPos + position[1]
+            result = (xPixelValue, yPixelValue, band, coefficientsAsString)
+
+            collector.collect(result)
         
     def __init__(self, slicedTileWidth = 0, slicedTileHeight = 0):
         super(ApproxInvalidValues, self).__init__()
@@ -317,7 +324,7 @@ if __name__ == "__main__":
         .reduce_group(CubeCreator(leftUpper, rightLower, int(blockSize), int(blockSize)), TILE)\
         .flat_map(SliceDetailedBlocks(int(detailedBlockSize), int(detailedBlockSize)), SLICEDTILE)\
         .group_by(PositionSelector(), (INT, INT, INT)) \
-        .reduce_group(ApproxInvalidValues(int(detailedBlockSize), int(detailedBlockSize)), SLICEDTILE)\
+        .reduce_group(ApproxInvalidValues(int(detailedBlockSize), int(detailedBlockSize)), (INT, INT, INT, STRING))\
         .write_text(output_file, write_mode=WriteMode.OVERWRITE)
         #.group_by(AcqDateSelector(), STRING)\
         #.sort_group(AcqDateSelector(), Order.ASCENDING)\
@@ -333,4 +340,4 @@ if __name__ == "__main__":
     print("detailedBlockSize: ", detailedBlockSize)
     env.set_degree_of_parallelism(dop)
 
-    env.execute(local=True)
+    env.execute()

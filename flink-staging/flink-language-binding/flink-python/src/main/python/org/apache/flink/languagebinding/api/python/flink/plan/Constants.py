@@ -208,6 +208,7 @@ if PY2:
     CUBE = Cube()
     TIMESERIES = TimeSeries()
     SLICEDTILE = SlicedTile()
+    ARRAY = []
 elif PY3:
     BOOL = True
     INT = 1

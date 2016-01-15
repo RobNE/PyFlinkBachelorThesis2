@@ -662,7 +662,6 @@ public class Sender implements Serializable {
 
 
 			if (value.getAqcuisitionDate() != null) {
-				System.out.println("The aqu date in the sender: " + value.getAqcuisitionDate());
 				this.boolSerializer.buffer.clear();
 				this.boolSerializer.serializeInternal(true);
 				length += this.boolSerializer.buffer.position();

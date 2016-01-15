@@ -330,10 +330,7 @@ class StringDeserializer(object):
 
     def deserialize(self):
         length = unpack(">i", self.read(4, self._group))[0]
-        print ("Lenght of the string: " + str(length))
         raw = self.read(length, self._group)
-        #print (raw)
-        print (raw.decode("utf-8"))
         return raw.decode("utf-8") if length else ""
 
 
@@ -399,7 +396,6 @@ class SlicedTileDeserializer(object):
         isAckDate = self._boolSerializer.deserialize()
         if isAckDate > 0:
             slicedTile._aquisitionDate = self._stringSerializer.deserialize()
-            print ("The deserialized acqu date: " + str(slicedTile._aquisitionDate))
 
         slicedTile._band = self._intSerializer.deserialize()
 

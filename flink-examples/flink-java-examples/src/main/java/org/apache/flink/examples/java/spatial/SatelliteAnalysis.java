@@ -17,8 +17,6 @@
  */
 package org.apache.flink.examples.java.spatial;
 
-import java.io.OutputStream;
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -46,11 +44,11 @@ import org.apache.flink.api.java.spatial.TileTimeKeySelector;
 import org.apache.flink.api.java.spatial.TileTypeInformation;
 import org.apache.flink.api.java.spatial.envi.TileInputFormat;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple6;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.util.Collector;
-import org.apache.commons.math.stat.regression.OLSMultipleLinearRegression;
+//import org.apache.commons.math.stat.regression.OLSMultipleLinearRegression;
 
 public class SatelliteAnalysis {
 	
@@ -62,18 +60,8 @@ public class SatelliteAnalysis {
 	private static int pixelSize;
 	private static int detailedBlockSize; //squared blocks for the beginning
 	private static HashSet<Long> allDates = new HashSet<Long>(128);
-	private static PrintStream dummyStream;
 
 	public static void main(String[] args) throws Exception {
-		dummyStream    = new PrintStream(new OutputStream(){
-			public void write(int b) {
-				//NO-OP
-			}
-		});
-
-		//System.setErr(dummyStream);
-		//System.setOut(dummyStream);
-
 		//Check if all parameters are present
 		if (!parseParameters(args)) {
 			return;
@@ -94,7 +82,7 @@ public class SatelliteAnalysis {
 		//Slices all Tiles in smaller SlicedTiles. Then groups them by their position and sorts them by acquisitionDate. Afterwards the missing/invalid values 
 		//for every group are approximated and inserted in the group.
 		DataSet<SlicedTile> slicedTiles = stitchedTimeSlices.flatMap(new SliceDetailedBlocks(detailedBlockSize, detailedBlockSize));
-		DataSet<Tuple6<Integer, Integer, Integer, Double, Double, Double>> slicedTilesSortedAndApproximated = slicedTiles
+		DataSet<Tuple4<Integer, Integer, Integer, String>> slicedTilesSortedAndApproximated = slicedTiles
 				//Group the slicedTiles by their position and the respective band
 				.groupBy(new KeySelector<SlicedTile, Tuple2<Tuple2<Integer, Integer>, Integer>>() {
 					private static final long serialVersionUID = 5L;
@@ -200,8 +188,6 @@ public class SatelliteAnalysis {
 					out.collect(slicedTile);
 				}
 			}
-			
-			//TODO: Check whether the different bands are handled correctly
 			allDates.add(Long.parseLong(value.getAqcuisitionDate(), 10));
 		}
 		
@@ -226,13 +212,13 @@ public class SatelliteAnalysis {
 	 * Every instance of the groupReduce has access to every SlicedTile in a group.
 	 */
 	
-	public static final class ApproxInvalidValues implements GroupReduceFunction<SlicedTile, Tuple6<Integer, Integer, Integer, Double, Double, Double>> {
+	public static final class ApproxInvalidValues implements GroupReduceFunction<SlicedTile, Tuple4<Integer, Integer, Integer, String>> {
 		private static final long serialVersionUID = 4L;
 		private int slicedTileWidth;
 		private int slicedTileHeight;
 
 		@Override
-		public void reduce(Iterable<SlicedTile> values, Collector<Tuple6<Integer, Integer, Integer, Double, Double, Double>> out) throws Exception {
+		public void reduce(Iterable<SlicedTile> values, Collector<Tuple4<Integer, Integer, Integer, String>> out) throws Exception {
 			//Create a HashMap for every pixel of the slicedTile. The HashMaps consist of the corresponding pixelTimeSeries
 			//System.out.println("The detailedBlockSize: " + slicedTileWidth + " " + slicedTileHeight);
 			System.out.println("The reduce is executed");
@@ -254,23 +240,25 @@ public class SatelliteAnalysis {
 			for (SlicedTile slicedTile : values) {
 				if (band == -1) {
 					band = slicedTile.getBand();
-				}if (slicedTileXPos == -1) {
+				}
+				if (slicedTileXPos == -1) {
 					slicedTileXPos = slicedTile.getPositionInTile().f0;
-				}if (slicedTileYPos == -1) {
+				}
+				if (slicedTileYPos == -1) {
 					slicedTileYPos = slicedTile.getPositionInTile().f1;
 				}
-				if (band != slicedTile.getBand()) {
-					System.out.println("The band should be " + band + " but is: " + slicedTile.getBand());
-				}
 				long acquisitionDate = Long.parseLong(slicedTile.getAqcuisitionDate(), 10);
+				short [] S16Tile = slicedTile.getSlicedTileS16Tile();
 				for (int row = 0; row < slicedTileHeight; row++) {
 					for (int col = 0; col < slicedTileWidth; col++) {
-						short [] S16Tile = slicedTile.getSlicedTileS16Tile();
+
 						//Get the pixel value for the pixel at position row/col
 						try {
 							short pixelVegetationIndex = S16Tile[row*slicedTileWidth + col];
-							Tuple2<Integer, Integer> position = new Tuple2<Integer, Integer>(col, row);
-							allPixelTimeSeries.get(position).put(acquisitionDate, pixelVegetationIndex);
+							if (pixelVegetationIndex > -9999 && pixelVegetationIndex < 16000) {
+								Tuple2<Integer, Integer> position = new Tuple2<Integer, Integer>(col, row);
+								allPixelTimeSeries.get(position).put(acquisitionDate, pixelVegetationIndex);
+							}
 						} catch(Exception e) {
 							//System.out.println("The slicedTile x: " + slicedTileWidth + " and the y: " + slicedTileHeight);
 							//System.out.println("The row: " + row + " and the col: " + col + " when the array fails at the position: " + (row + col));
@@ -294,10 +282,8 @@ public class SatelliteAnalysis {
 				double[] train_x = new double[trainingSetSize];
 				svm_node[] predict_x = new svm_node[trainingSetList.size()];
 				double[] train_y = new double[trainingSetSize];
+
 				double maxValue = -9999;
-				
-				//System.out.println("The trainingList: " + trainingSetList);
-				
 				for (int i=0; i < trainingSetList.size(); i++) {
 					Long aqcisitionDate = trainingSetList.get(i);
 					train_x [i] = aqcisitionDate.doubleValue();
@@ -338,12 +324,22 @@ public class SatelliteAnalysis {
 				param.probability = 1;
 	
 				svm_model model = svm.svm_train(prob, param);
+				double[][] svrCoefficients= model.sv_coef;
+				String svrCoefficientsAsString = new String("Vector b: ");
+				for (double[] dArray: svrCoefficients) {
+					for (double d: dArray) {
+						svrCoefficientsAsString += String.valueOf(d);
+						svrCoefficientsAsString += ", ";
+					}
+				}
+				svrCoefficientsAsString = svrCoefficientsAsString.substring(0, svrCoefficientsAsString.length()-2);
 
-				double svrProbability = svm.svm_get_svr_probability(model);
-				double predictedValuesSVR = svm.svm_predict(model, predict_x);
-				System.out.println("The svr prob: " + svm.svm_get_svr_probability(model));
-				System.out.println("The predicted values after SVR: " + predictedValuesSVR);
-				
+				//System.out.println("The predicted values after OLS: " + svrCoefficientsAsString);
+
+				//double predictedValuesSVR = svm.svm_predict(model, predict_x);
+				//System.out.println("The svr prob: " + svm.svm_get_svr_probability(model));
+				//System.out.println("The predicted values after SVR: " + predictedValuesSVR);
+				/*
 				double[][] olsProblem_x = new double[countOfDates][];
 				double[] olsProblem_y = new double[countOfDates];
 				
@@ -362,12 +358,19 @@ public class SatelliteAnalysis {
 				//regressionProblem.newSampleData(olsProblem_y, countOfDates, 0);
 				regressionProblem.newSampleData(olsProblem_y, olsProblem_x);
 				
-				double[] predictedValuesOLS = regressionProblem.estimateResiduals();
-				double regressandVariance = regressionProblem.estimateRegressandVariance();
-				//for (double v : predictedValuesOLS) {
-					//System.out.println("The predicted values after OLS: " + v);
-				//}
-				Tuple6<Integer, Integer, Integer, Double, Double, Double> pixelTimeSeriesInformation = new Tuple6<Integer, Integer, Integer, Double, Double, Double>();
+				double[] predictedValuesOLS = regressionProblem.estimateRegressionParameters();
+
+				//double regressandVariance = regressionProblem.estimateRegressandVariance();
+				*/
+
+				/*
+				for (double[] v : svrCoefficients) {
+					for (double d: v) {
+						System.out.println("The predicted values after OLS: " + d);
+					}
+				}
+				*/
+				Tuple4<Integer, Integer, Integer, String> pixelTimeSeriesInformation = new Tuple4<Integer, Integer, Integer, String>();
 				//Pixel x coord
 				int xPixelValue = this.slicedTileWidth * slicedTileXPos + position.f0;
 				pixelTimeSeriesInformation.f0 = xPixelValue;
@@ -376,14 +379,10 @@ public class SatelliteAnalysis {
 				pixelTimeSeriesInformation.f1 = yPixelValue;
 				//Pixel band
 				pixelTimeSeriesInformation.f2 = band;
-				//SVR Probability
-				pixelTimeSeriesInformation.f3 = svrProbability;
-				//SVR predictedValues
-				pixelTimeSeriesInformation.f4 = predictedValuesSVR;
-				//OLS regressandVariance
-				pixelTimeSeriesInformation.f5 = regressandVariance;
+				//SVR coefficients
+				pixelTimeSeriesInformation.f3 = svrCoefficientsAsString;
 
-				System.out.println("The resulting Tuple6: " + pixelTimeSeriesInformation);
+				//System.out.println("The resulting Tuple4: " + pixelTimeSeriesInformation);
 
 				out.collect(pixelTimeSeriesInformation);
 			}
