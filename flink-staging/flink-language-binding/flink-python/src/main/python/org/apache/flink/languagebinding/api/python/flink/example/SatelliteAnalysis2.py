@@ -311,33 +311,26 @@ if __name__ == "__main__":
     blockSize = sys.argv[5]
     pixelSize = sys.argv[6]
     outputPath = sys.argv[7]
+    output_file = "file://" + outputPath
     detailedBlockSize = sys.argv[8]
 
     leftUpper = (float(leftLat), float(leftLong))
     rightLower = (float(leftLat) - int(blockSize) * int(pixelSize),
                   float(leftLong) + int(blockSize) * int(pixelSize))
     
-    output_file = "file:///Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/outPython/pythonCuttingWithSlicedS16.txt"
+    #output_file = "file:///Users/rellerkmann/Desktop/Bachelorarbeit/Bachelorarbeit/BachelorThesis/Code/Data/outPython/pythonCuttingWithSlicedS16.txt"
 
     data = env.read_envi(path, leftLong, leftLat, blockSize, pixelSize)
-    pixelTimeSeries = data.group_by(AcqDateSelector(), STRING)\
-        .reduce_group(CubeCreator(leftUpper, rightLower, int(blockSize), int(blockSize)), TILE)\
-        .flat_map(SliceDetailedBlocks(int(detailedBlockSize), int(detailedBlockSize)), SLICEDTILE)\
-        .group_by(PositionSelector(), (INT, INT, INT)) \
-        .reduce_group(ApproxInvalidValues(int(detailedBlockSize), int(detailedBlockSize)), (INT, INT, INT, STRING))\
-        .write_text(output_file, write_mode=WriteMode.OVERWRITE)
-        #.group_by(AcqDateSelector(), STRING)\
-        #.sort_group(AcqDateSelector(), Order.ASCENDING)\
-        #.reduce_group(ApproxInvalidValues(detailedBlockSize, detailedBlockSize), SLICEDTILE)\
-        #.write_text(output_file, write_mode=WriteMode.OVERWRITE)
-        #.group_by(AcqDateSelector(), STRING)\
-        #.sort_group(AcqDateSelector(), STRING)\
-        
-        #.group_by(AcqDateSelector(), STRING)\
-        #.sort_group(AcqDateSelector(), STRING)\
-        #.reduce_group(ApproxInvalidValues(detailedBlockSize, detailedBlockSize), SLICEDTILE)\
+    dataCube = data.group_by(AcqDateSelector(), STRING)\
+        .reduce_group(CubeCreator(leftUpper, rightLower, int(blockSize), int(blockSize)), TILE)
+    slicedTiles = dataCube.flat_map(SliceDetailedBlocks(int(detailedBlockSize), int(detailedBlockSize)), SLICEDTILE)
+    slicedTilesSortedAndApproximated = slicedTiles.group_by(PositionSelector(), (INT, INT, INT)) \
+        .reduce_group(ApproxInvalidValues(int(detailedBlockSize), int(detailedBlockSize)), (INT, INT, INT, STRING))
+
+    slicedTilesSortedAndApproximated.write_text(output_file, write_mode=WriteMode.OVERWRITE)
         
     print("detailedBlockSize: ", detailedBlockSize)
     env.set_degree_of_parallelism(dop)
 
     env.execute()
+    #env.execute(local=True)
